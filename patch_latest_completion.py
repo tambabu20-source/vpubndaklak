@@ -7,6 +7,7 @@ import bz2
 from pathlib import Path
 
 
+# Updating this file triggers GitHub Actions to publish the latest dashboard payload.
 def main() -> int:
     parser = argparse.ArgumentParser(description="Áp dụng gói dashboard VBQPPL đã dựng sẵn.")
     parser.add_argument("--index", default="index.html")
