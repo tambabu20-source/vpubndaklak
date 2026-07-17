@@ -6,8 +6,9 @@ import base64
 import bz2
 from pathlib import Path
 
+EXPECTED_PAYLOAD_LENGTH = 42544
 
-# Updating this file triggers GitHub Actions to publish the latest dashboard payload.
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Áp dụng gói dashboard VBQPPL đã dựng sẵn.")
     parser.add_argument("--index", default="index.html")
@@ -19,6 +20,10 @@ def main() -> int:
         raise SystemExit("Không tìm thấy gói dữ liệu dashboard trong thư mục payload.")
 
     payload = "".join(chunk.read_text(encoding="ascii").strip() for chunk in chunks)
+    if len(payload) < EXPECTED_PAYLOAD_LENGTH:
+        raise SystemExit(f"Gói dữ liệu chưa đủ: {len(payload)}/{EXPECTED_PAYLOAD_LENGTH} ký tự.")
+    payload = payload[:EXPECTED_PAYLOAD_LENGTH]
+
     html = bz2.decompress(base64.b85decode(payload))
     Path(args.index).write_bytes(html)
     print(f"Đã cập nhật {args.index} từ {len(chunks)} mảnh dữ liệu: {len(html):,} bytes.")
