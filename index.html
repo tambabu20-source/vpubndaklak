@@ -30,12 +30,50 @@
       "payload/vbqppl_dashboard_gzip_10.txt"
     ];
 
+    function parseVnDate(value) {
+      const match = String(value || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      return match ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null;
+    }
+
+    function formatVnDate(date) {
+      return `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+    }
+
+    function readJsonScript(html, id) {
+      const match = html.match(new RegExp(`<script id="${id}" type="application/json">([\\s\\S]*?)<\\/script>`));
+      if (!match) return [];
+      try { return JSON.parse(match[1]); } catch { return []; }
+    }
+
+    function latestProgressDate(html) {
+      const rows = [
+        ...readJsonScript(html, "dataset"),
+        ...readJsonScript(html, "completedDataset"),
+        ...readJsonScript(html, "updatesDataset")
+      ];
+      const dates = rows
+        .flatMap(item => [parseVnDate(item.updatedAt), parseVnDate(item.completedAt)])
+        .filter(Boolean)
+        .sort((a, b) => b.getTime() - a.getTime());
+      return dates.length ? formatVnDate(dates[0]) : "";
+    }
+
+    function syncProgressDate(html) {
+      const latest = latestProgressDate(html);
+      if (!latest) return html;
+      return html
+        .replace(/Tóm tắt tiến độ xử lý đến ngày \d{1,2}\/\d{1,2}\/\d{4}/, `Tóm tắt tiến độ xử lý đến ngày ${latest}`)
+        .replace(/Đến ngày <strong>\d{1,2}\/\d{1,2}\/\d{4}<\/strong>/, `Đến ngày <strong>${latest}</strong>`)
+        .replace(/const recentWindowEnd = parseUpdateDate\('\d{1,2}\/\d{1,2}\/\d{4}'\)/, `const recentWindowEnd = parseUpdateDate('${latest}')`)
+        .replace(/const latestLabel = '\d{1,2}\/\d{1,2}\/\d{4}'/, `const latestLabel = '${latest}'`);
+    }
+
     async function inflateDashboard() {
       if (!("DecompressionStream" in window)) {
         throw new Error("Trình duyệt chưa hỗ trợ giải nén dashboard tự động.");
       }
       const b64 = (await Promise.all(CHUNKS.map(async path => {
-        const res = await fetch(path + "?v=20260717-3", { cache: "no-store" });
+        const res = await fetch(path + "?v=20260717-4", { cache: "no-store" });
         if (!res.ok) throw new Error("Không tải được " + path);
         return (await res.text()).trim();
       }))).join("");
@@ -43,7 +81,7 @@
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
       const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-      const html = await new Response(stream).text();
+      const html = syncProgressDate(await new Response(stream).text());
       document.open();
       document.write(html);
       document.close();
