@@ -4,15 +4,19 @@ on:
   push:
     paths:
       - index.html
+      - update_vbqppl_from_google_light.py
       - .github/workflows/update-vbqppl-pages.yml
   schedule:
     # 16:30 hằng ngày theo giờ Việt Nam (UTC+7) = 09:30 UTC.
-    # Dòng kiểm tra tự động: 19/7/2026.
     - cron: "30 9 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: vbqppl-dashboard-update
+  cancel-in-progress: false
 
 jobs:
   update-dashboard:
@@ -21,7 +25,18 @@ jobs:
       - name: Lấy mã nguồn
         uses: actions/checkout@v4
 
-      - name: Kiểm tra dashboard VBQPPL
+      - name: Cài Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Rà soát nguồn Google Docs và cập nhật dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python update_vbqppl_from_google_light.py --index index.html --allow-source-failure
+
+      - name: Kiểm tra dashboard sau cập nhật
         shell: bash
         run: |
           set -euo pipefail
@@ -34,7 +49,16 @@ jobs:
           grep -q "Cập nhật tiến độ mới nhất" index.html
           echo "Dashboard VBQPPL đang sẵn sàng."
 
-      - name: Ghi nhận kết quả
+      - name: Commit và đẩy lên GitHub nếu có số liệu mới
+        shell: bash
         run: |
-          echo "Dashboard được GitHub Pages phục vụ từ file index.html."
-          echo "Đã bỏ cơ chế patch_latest_completion.py cũ để tránh lỗi giải nén dữ liệu."
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi số liệu để đẩy lên GitHub."
+          else
+            git commit -m "Tự động cập nhật dashboard VBQPPL từ Google Docs"
+            git push
+          fi
