@@ -3,7 +3,8 @@ name: Cập nhật dashboard VBQPPL
 on:
   push:
     paths:
-      - patch_latest_completion.py
+      - index.html
+      - payload/vbqppl_dashboard_gzip_*.txt
       - .github/workflows/update-vbqppl-pages.yml
   schedule:
     # 16:30 hằng ngày theo giờ Việt Nam (UTC+7) = 09:30 UTC.
@@ -11,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   update-dashboard:
@@ -20,22 +21,20 @@ jobs:
       - name: Lấy mã nguồn
         uses: actions/checkout@v4
 
-      - name: Cài Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Cập nhật dashboard VBQPPL
-        run: python patch_latest_completion.py --index index.html
-
-      - name: Commit nếu có số liệu mới
+      - name: Kiểm tra dashboard và dữ liệu
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          if git diff --cached --quiet; then
-            echo "Không có thay đổi số liệu."
-          else
-            git commit -m "Tự động cập nhật dashboard VBQPPL"
-            git push
-          fi
+          set -euo pipefail
+          test -s index.html
+          grep -q "syncProgressDate" index.html
+          grep -q "payload/vbqppl_dashboard_gzip_10.txt" index.html
+          for i in $(seq -w 1 10); do
+            file="payload/vbqppl_dashboard_gzip_${i}.txt"
+            test -s "$file"
+          done
+          echo "Dashboard VBQPPL và các gói dữ liệu đang sẵn sàng."
+
+      - name: Ghi nhận kết quả
+        run: |
+          echo "Dashboard được GitHub Pages phục vụ từ index.html và thư mục payload/."
+          echo "Không chạy patch_latest_completion.py vì đây là cơ chế dữ liệu cũ."
