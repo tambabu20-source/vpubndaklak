@@ -7,6 +7,7 @@ on:
       - .github/workflows/update-vbqppl-pages.yml
   schedule:
     # 16:30 hằng ngày theo giờ Việt Nam (UTC+7) = 09:30 UTC.
+    # Dòng kiểm tra tự động: 19/7/2026.
     - cron: "30 9 * * *"
   workflow_dispatch:
 
