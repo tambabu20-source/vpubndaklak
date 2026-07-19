@@ -5,7 +5,6 @@ import argparse
 import html
 import json
 import re
-import sys
 import urllib.request
 import zipfile
 from collections import Counter
@@ -18,6 +17,7 @@ GOOGLE_DOC_ID = "1lM3yY0Z8IQYFF9IN7YyKvqvb4MvNkSfKCNJPN_H-a6o"
 GOOGLE_DOC_EXPORT = f"https://docs.google.com/document/d/{GOOGLE_DOC_ID}/export?format=docx"
 TOTAL = 365
 MIN_SOURCE_ROWS = 150
+FALSE_AUTO_PROGRESS = "Đã xử lý/không còn trong danh mục chưa xử lý của nguồn Google Docs"
 
 
 def norm(value: str) -> str:
@@ -79,7 +79,7 @@ def parse_docx_rows(data: bytes) -> dict[str, dict]:
             cells = [c for c in cells if c]
             if len(cells) < 4:
                 continue
-            name_index = next((i for i, text in enumerate(cells) if re.search(r"(Nghị quyết|Quyết định|Chỉ thị).{0,60}(NQ-HĐND|QĐ-UBND|CT-UBND)", text, re.I)), -1)
+            name_index = next((i for i, text in enumerate(cells) if re.search(r"(Nghị quyết|Quyết định|Chỉ thị).{0,80}(NQ-HĐND|QĐ-UBND|CT-UBND)", text, re.I)), -1)
             if name_index < 0:
                 continue
             name = cells[name_index]
@@ -106,6 +106,13 @@ def parse_vn_date(value: str | None) -> datetime | None:
         return None
 
 
+def valid_progress_date(value: str | None) -> datetime | None:
+    parsed = parse_vn_date(value)
+    if parsed and parsed.date() <= datetime.now().date():
+        return parsed
+    return None
+
+
 def format_vn_date(value: datetime) -> str:
     return f"{value.day}/{value.month}/{value.year}"
 
@@ -114,13 +121,14 @@ def latest_date(rows: list[dict], done: list[dict], updates: list[dict], source_
     dates: list[datetime] = []
     for item in rows + done + updates:
         for key in ("updatedAt", "completedAt"):
-            parsed = parse_vn_date(item.get(key))
+            parsed = valid_progress_date(item.get(key))
             if parsed:
                 dates.append(parsed)
+    # Chỉ đọc ngày trong nội dung tiến độ/ghi chú; không lấy mốc thời hạn tương lai làm ngày cập nhật.
     for item in source_rows.values():
-        for value in item.values():
-            for match in re.finditer(r"\d{1,2}/\d{1,2}/\d{4}", str(value or "")):
-                parsed = parse_vn_date(match.group(0))
+        for key in ("status", "note"):
+            for match in re.finditer(r"\d{1,2}/\d{1,2}/\d{4}", str(item.get(key) or "")):
+                parsed = valid_progress_date(match.group(0))
                 if parsed:
                     dates.append(parsed)
     return format_vn_date(max(dates)) if dates else format_vn_date(datetime.now())
@@ -142,7 +150,7 @@ def phase_from(status: str, note: str = "") -> str:
     s = norm(f"{status} {note}")
     if not s or "chưa triển khai" in s or s.startswith("chưa"):
         return "Chưa triển khai"
-    if "đã xử lý" in s or "đã hoàn thành" in s or "bãi bỏ bởi" in s or "bãi bỏ tại" in s:
+    if "đã xử lý" in s or "đã hoàn thành" in s or "bãi bỏ bởi" in s or "bãi bỏ tại" in s or "thay thế bằng" in s:
         return "Đã hoàn thành"
     if "trình" in s or "thẩm định" in s or "bctđ" in s or "xin ý kiến thành viên" in s:
         return "Đã trình/thẩm định"
@@ -175,44 +183,51 @@ def event_key(event: dict) -> tuple[str, str, str]:
     return (norm(event.get("name", "")), event.get("updatedAt", ""), event.get("progress", ""))
 
 
-def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_rows: dict[str, dict], as_of: str) -> tuple[list[dict], list[dict], list[dict]]:
+def restore_false_auto_completions(rows: list[dict], done: list[dict], updates: list[dict]) -> tuple[list[dict], list[dict], list[dict], int]:
+    false_events = {}
+    kept_updates = []
+    for event in updates:
+        if event.get("progress") == FALSE_AUTO_PROGRESS:
+            false_events[norm(event.get("name", ""))] = event
+        else:
+            kept_updates.append(event)
+    if not false_events:
+        return rows, done, updates, 0
+
+    active_names = {norm(row.get("name", "")) for row in rows}
+    restored = 0
+    kept_done = []
+    for item in done:
+        key = norm(item.get("name", ""))
+        if item.get("status") == FALSE_AUTO_PROGRESS and key in false_events:
+            event = false_events[key]
+            restored_item = dict(item)
+            old_status = next((change.get("old") for change in event.get("changes", []) if change.get("label") == "Tình trạng"), "")
+            restored_item["status"] = old_status or "Chưa có thông tin"
+            restored_item["phase"] = event.get("oldPhase") or phase_from(restored_item.get("status", ""), restored_item.get("note", ""))
+            restored_item["priority"] = event.get("oldPriority") or priority_from(restored_item)
+            restored_item["completed"] = False
+            restored_item.pop("completedAt", None)
+            restored_item["recentUpdate"] = bool(restored_item.get("updatedAt") and valid_progress_date(restored_item.get("updatedAt")))
+            if key not in active_names:
+                rows.append(restored_item)
+                active_names.add(key)
+                restored += 1
+        else:
+            kept_done.append(item)
+    return rows, kept_done, kept_updates, restored
+
+
+def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_rows: dict[str, dict], as_of: str) -> tuple[list[dict], list[dict], list[dict], int]:
     existing_events = {event_key(event) for event in updates}
-    done_names = {norm(row.get("name", "")) for row in done}
     active: list[dict] = []
+    unmatched = 0
 
     for row in rows:
         src = find_source(row, source_rows)
         if not src:
-            item = dict(row)
-            item.update({
-                "status": "Đã xử lý/không còn trong danh mục chưa xử lý của nguồn Google Docs",
-                "phase": "Đã hoàn thành",
-                "priority": "Hoàn thành",
-                "completed": True,
-                "completedAt": as_of,
-                "updatedAt": as_of,
-                "recentUpdate": True,
-            })
-            if norm(item.get("name", "")) not in done_names:
-                done.append(item)
-                done_names.add(norm(item.get("name", "")))
-            event = {
-                "stt": row.get("stt", ""),
-                "name": row.get("name", ""),
-                "field": row.get("field", ""),
-                "agency": row.get("agency", ""),
-                "updatedAt": as_of,
-                "oldPhase": row.get("phase", ""),
-                "newPhase": "Đã hoàn thành",
-                "oldPriority": row.get("priority", ""),
-                "newPriority": "Hoàn thành",
-                "progress": item["status"],
-                "highlight": True,
-                "changes": [{"label": "Tình trạng", "old": row.get("status", ""), "new": item["status"]}],
-            }
-            if event_key(event) not in existing_events:
-                updates.append(event)
-                existing_events.add(event_key(event))
+            unmatched += 1
+            active.append(row)
             continue
 
         old = {k: row.get(k, "") for k in ("action", "proposedTime", "deadline", "status", "note", "phase", "priority")}
@@ -250,11 +265,11 @@ def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_
 
     for index, row in enumerate(active, start=1):
         row["stt"] = index
-    return active, done, updates
+    return active, done, updates, unmatched
 
 
 def date_key(value: str) -> tuple[int, int, int]:
-    parsed = parse_vn_date(value)
+    parsed = valid_progress_date(value)
     return (parsed.year, parsed.month, parsed.day) if parsed else (0, 0, 0)
 
 
@@ -294,8 +309,9 @@ def run(index_path: Path) -> None:
     source_rows = parse_docx_rows(download_docx())
     if len(source_rows) < MIN_SOURCE_ROWS:
         raise RuntimeError(f"Nguồn Google Docs chỉ đọc được {len(source_rows)} dòng, thấp hơn ngưỡng an toàn {MIN_SOURCE_ROWS}; giữ nguyên dashboard cũ.")
+    rows, done, updates, restored = restore_false_auto_completions(rows, done, updates)
     as_of = latest_date(rows, done, updates, source_rows)
-    rows, done, updates = update_rows(rows, done, updates, source_rows, as_of)
+    rows, done, updates, unmatched = update_rows(rows, done, updates, source_rows, as_of)
     done.sort(key=lambda row: date_key(row.get("completedAt", "")), reverse=True)
     updates.sort(key=lambda row: (date_key(row.get("updatedAt", "")), 1 if row.get("newPhase") == "Đã hoàn thành" else 0), reverse=True)
     source = replace_json(source, "dataset", rows)
@@ -304,6 +320,7 @@ def run(index_path: Path) -> None:
     source = refresh_text(source, rows, done, as_of)
     index_path.write_text(source, encoding="utf-8")
     print(f"Đã rà soát Google Docs: còn {len(rows)} văn bản, hoàn thành {len(done)} văn bản, ngày cập nhật {as_of}.")
+    print(f"Khôi phục {restored} văn bản bị đánh dấu hoàn thành nhầm; giữ nguyên {unmatched} văn bản chưa khớp chắc chắn với nguồn.")
 
 
 def main() -> int:
