@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - index.html
-      - payload/vbqppl_dashboard_gzip_*.txt
       - .github/workflows/update-vbqppl-pages.yml
   schedule:
     # 16:30 hằng ngày theo giờ Việt Nam (UTC+7) = 09:30 UTC.
@@ -21,20 +20,20 @@ jobs:
       - name: Lấy mã nguồn
         uses: actions/checkout@v4
 
-      - name: Kiểm tra dashboard và dữ liệu
+      - name: Kiểm tra dashboard VBQPPL
         shell: bash
         run: |
           set -euo pipefail
           test -s index.html
-          grep -q "syncProgressDate" index.html
-          grep -q "payload/vbqppl_dashboard_gzip_10.txt" index.html
-          for i in $(seq -w 1 10); do
-            file="payload/vbqppl_dashboard_gzip_${i}.txt"
-            test -s "$file"
-          done
-          echo "Dashboard VBQPPL và các gói dữ liệu đang sẵn sàng."
+          grep -q "Dashboard theo dõi xử lý danh mục văn bản QPPL" index.html
+          grep -q 'id="dataset"' index.html
+          grep -q 'id="completedDataset"' index.html
+          grep -q 'id="updatesDataset"' index.html
+          grep -q "Tóm tắt tiến độ xử lý" index.html
+          grep -q "Cập nhật tiến độ mới nhất" index.html
+          echo "Dashboard VBQPPL đang sẵn sàng."
 
       - name: Ghi nhận kết quả
         run: |
-          echo "Dashboard được GitHub Pages phục vụ từ index.html và thư mục payload/."
-          echo "Không chạy patch_latest_completion.py vì đây là cơ chế dữ liệu cũ."
+          echo "Dashboard được GitHub Pages phục vụ từ file index.html."
+          echo "Đã bỏ cơ chế patch_latest_completion.py cũ để tránh lỗi giải nén dữ liệu."
