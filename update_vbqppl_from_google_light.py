@@ -156,7 +156,7 @@ def phase_from(status: str, note: str = "") -> str:
         return "Đã trình/thẩm định"
     if "lấy ý kiến" in s or "đang" in s or "đăng ký" in s or "soạn thảo" in s or "quy định chi tiết" in s or "công văn" in s or "phân công" in s:
         return "Đang thực hiện"
-    return "Khác"
+    return "Đang thực hiện"
 
 
 def priority_from(row: dict) -> str:
@@ -181,6 +181,41 @@ def find_source(row: dict, source_rows: dict[str, dict]) -> dict | None:
 
 def event_key(event: dict) -> tuple[str, str, str]:
     return (norm(event.get("name", "")), event.get("updatedAt", ""), event.get("progress", ""))
+
+
+def normalize_future_dates(items: list[dict], fallback_date: str) -> int:
+    fixed = 0
+    today = datetime.now().date()
+    for item in items:
+        for key in ("updatedAt", "completedAt"):
+            parsed = parse_vn_date(item.get(key))
+            if parsed and parsed.date() > today:
+                item[key] = fallback_date
+                fixed += 1
+    return fixed
+
+
+def completion_event(row: dict, old: dict, as_of: str) -> dict:
+    return {
+        "stt": row.get("stt", ""),
+        "name": row.get("name", ""),
+        "field": row.get("field", ""),
+        "agency": row.get("agency", ""),
+        "updatedAt": as_of,
+        "oldPhase": old.get("phase", ""),
+        "newPhase": "Đã hoàn thành",
+        "oldPriority": old.get("priority", ""),
+        "newPriority": "Hoàn thành",
+        "progress": row.get("status", "") or "Đã xử lý; chuyển sang danh mục đã xử lý",
+        "highlight": True,
+        "changes": [
+            {
+                "label": "Tình trạng",
+                "old": old.get("status", ""),
+                "new": row.get("status", "") or "Đã xử lý; chuyển sang danh mục đã xử lý",
+            }
+        ],
+    }
 
 
 def restore_false_auto_completions(rows: list[dict], done: list[dict], updates: list[dict]) -> tuple[list[dict], list[dict], list[dict], int]:
@@ -220,6 +255,7 @@ def restore_false_auto_completions(rows: list[dict], done: list[dict], updates: 
 
 def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_rows: dict[str, dict], as_of: str) -> tuple[list[dict], list[dict], list[dict], int]:
     existing_events = {event_key(event) for event in updates}
+    done_names = {norm(row.get("name", "")) for row in done}
     active: list[dict] = []
     unmatched = 0
 
@@ -237,6 +273,24 @@ def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_
         row["deadlineMonth"] = month_from(row.get("deadline", "")) or row.get("deadlineMonth")
         row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
         row["priority"] = priority_from(row)
+
+        if row["phase"] == "Đã hoàn thành":
+            item = dict(row)
+            item.update({
+                "completed": True,
+                "completedAt": as_of,
+                "updatedAt": as_of,
+                "recentUpdate": True,
+            })
+            if norm(item.get("name", "")) not in done_names:
+                done.append(item)
+                done_names.add(norm(item.get("name", "")))
+            event = completion_event(item, old, as_of)
+            if event_key(event) not in existing_events:
+                updates.append(event)
+                existing_events.add(event_key(event))
+            continue
+
         changes = []
         labels = {"action": "Hình thức xử lý", "proposedTime": "Thời gian sở/ngành đề xuất", "deadline": "Thời hạn UBND", "status": "Tình trạng", "note": "Ghi chú"}
         for key, label in labels.items():
@@ -312,6 +366,7 @@ def run(index_path: Path) -> None:
     rows, done, updates, restored = restore_false_auto_completions(rows, done, updates)
     as_of = latest_date(rows, done, updates, source_rows)
     rows, done, updates, unmatched = update_rows(rows, done, updates, source_rows, as_of)
+    fixed_dates = normalize_future_dates(rows, as_of) + normalize_future_dates(done, as_of) + normalize_future_dates(updates, as_of)
     done.sort(key=lambda row: date_key(row.get("completedAt", "")), reverse=True)
     updates.sort(key=lambda row: (date_key(row.get("updatedAt", "")), 1 if row.get("newPhase") == "Đã hoàn thành" else 0), reverse=True)
     source = replace_json(source, "dataset", rows)
@@ -321,6 +376,7 @@ def run(index_path: Path) -> None:
     index_path.write_text(source, encoding="utf-8")
     print(f"Đã rà soát Google Docs: còn {len(rows)} văn bản, hoàn thành {len(done)} văn bản, ngày cập nhật {as_of}.")
     print(f"Khôi phục {restored} văn bản bị đánh dấu hoàn thành nhầm; giữ nguyên {unmatched} văn bản chưa khớp chắc chắn với nguồn.")
+    print(f"Đã chuẩn hóa {fixed_dates} mốc ngày cập nhật tương lai không hợp lệ.")
 
 
 def main() -> int:
