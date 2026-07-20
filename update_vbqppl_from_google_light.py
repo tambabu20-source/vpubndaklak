@@ -18,6 +18,202 @@ GOOGLE_DOC_EXPORT = f"https://docs.google.com/document/d/{GOOGLE_DOC_ID}/export?
 TOTAL = 365
 MIN_SOURCE_ROWS = 150
 FALSE_AUTO_PROGRESS = "Đã xử lý/không còn trong danh mục chưa xử lý của nguồn Google Docs"
+MANUAL_REVIEW_AS_OF = "19/7/2026"
+MANUAL_REVIEW_UPDATES = {
+    "Nghị quyết số 04/2024/NQ-HĐND": {
+        "status": "UBND tỉnh đã có Tờ trình số 270/TTr-UBND trình HĐND tỉnh ban hành quyết định danh mục quy định chi tiết"
+    },
+    "Quyết định số 07/2014/QĐ-UBND": {
+        "status": "Đã có Tờ trình số 318/TTrCAT-PC04 ngày 10/7/2026 về việc đăng ký xây dựng Quyết định"
+    },
+    "Quyết định số 20/2016/QĐ-UBND": {
+        "status": "Đang tổng hợp ý kiến góp ý đối với dự thảo Quyết định để gửi Sở Tư pháp thẩm định"
+    },
+    "Quyết định số 32/2019/QĐ-UBND": {
+        "status": "Đã có Tờ trình số 293/TTrCAT-XNC ngày 01/7/2026 về việc đăng ký xây dựng Quyết định"
+    },
+    "Quyết định 23/2022/QĐ-UBND": {
+        "status": "Đang tiếp thu, giải trình báo cáo thẩm định của Sở Tư pháp"
+    },
+    "Quyết định số 48/2021/QĐ-UBND": {
+        "status": "Đang tiếp thu, giải trình báo cáo thẩm định của Sở Tư pháp",
+        "note": "Văn bản chịu tác động của tổ chức chính quyền địa phương 02 cấp theo Báo cáo số 216/BC-STP Trễ hạn"
+    },
+    "Quyết định số 37/2024/QĐ-UBND": {
+        "status": "Đã trình UBND tỉnh Dự thảo Quyết định mới tại Tờ trình số 292/TTr-CAT-PC07 ngày 01/7/2026. Hiện đang lấy ý kiến TVUBND"
+    },
+    "Quyết định số 38/2024/QĐ-UBND": {
+        "status": "Đã có Tờ trình số 267/TTr-CAT ngày 17/6/2026 trình UBND tỉnh xem xét, quyết định. Hiện đang lấy ý kiến TV UBND"
+    },
+    "Quyết định số 43/2024/QĐ-UBND": {
+        "status": "Đã có Tờ trình số 326/TTr-CAT-ANNCNB ngày 14/7/2026 về việc đăng ký xây dựng Quyết định"
+    },
+    "Quyết định số 12/2016/QĐ-UBND": {
+        "status": "Đang lấy ý kiến góp ý đối với Dự thảo Quyết định bãi bỏ"
+    },
+    "Quyết định số 03/2021/QĐ-UBND": {
+        "status": "Đang lấy ý kiến góp ý đối với Dự thảo Quyết định bãi bỏ"
+    },
+    "Quyết định số 39/2010/QĐ-UBND": {
+        "status": "Đang lấy ý kiến góp ý dự thảo Tờ trình tại Công văn số 3290/SKHCN"
+    },
+    "Quyết định số 08/2014/QĐ-UBND": {
+        "status": "Đang tổng hợp ý kiến góp ý"
+    },
+    "Quyết định số 34/2019/QĐ-UBND": {
+        "status": "Đang giải trình, tiếp thu ý kiến thẩm định của Sở Tư pháp"
+    },
+    "Quyết định số 36/2021/QĐ-UBND": {
+        "status": "Đang lấy ý kiến góp ý dự thảo Tờ trình tại Công văn số 3290/SKHCN"
+    },
+    "Quyết định số 10/2024/QĐ-UBND": {
+        "status": "Lấy ý kiến góp ý dự thảo Tờ trình tại Công văn 3200/SKHCN-CĐS"
+    },
+    "Quyết định số 11/2025/QĐ-UBND": {
+        "status": "Đang lấy ý kiến góp ý tại Công văn số 3262/SKHCN-VP"
+    },
+    "Nghị quyết số 78/2012/NQ-HĐND": {
+        "status": "UBND tỉnh đã có Công văn số 9777/UBND-NNMT ngày 01/7/2026 trình Thường trực HĐND tỉnh để đăng ký xây dựng Nghị quyết"
+    },
+    "Nghị quyết số 141/2014/NQ-HDND": {
+        "status": "Đang thực hiện báo cáo tổng kết thi hành và lập danh mục đề nghị bãi bỏ toàn bộ văn bản"
+    },
+    "Nghị quyết số 09/2021/NQ-HĐND": {
+        "note": "Thay đổi thời hạn xử lý thành tháng 12/2026"
+    },
+    "Nghị quyết số 07/2022/NQ-HĐND": {
+        "note": "Đang thực hiện báo cáo tổng kết thi hành và lập danh mục đề nghị bãi bỏ toàn bộ văn bản"
+    },
+    "Nghị quyết số 17/2022/NQ-HĐND": {
+        "status": "Đã xin ý kiến đối với đăng ký xây dựng Nghị qiuyết mới"
+    },
+    "Nghị quyết số 32/2023/NQ-HĐND": {
+        "status": "Đã đề xuất Sở Tư pháp tổng hợp, lập danh mục đề nghị UBND tỉnh trình Thường trực HĐND tỉnh quyết định Danh mục văn bản quy định chi tiết và nội dung giao quy định thuộc thẩm quyền ban hành của HĐND tỉnh tại Tờ trình số 143/TTr-STP ngày 17/6/2026"
+    },
+    "Quyết định số 33/2014/QĐ-UBND": {
+        "status": "Đang lấy ý kiến đối với đăng ký xây dựng văn ản mới tại Công văn số 6162/SNNMT-TTN ngày 19/6/2026",
+        "note": "Đề nghị thay đổi hình thức xử lý thành tháng 12/2026"
+    },
+    "Quyết định số 22/2016/QĐ-UBND": {
+        "status": "Đã thẩm định Dự thảo. Tuy nhiên, UBND tỉnh đã đồng ý lùi thời gian hành văn bản mới tại Công văn số 4129/UBND-CNXD ngày 30/3/2026. Hiện đang tiếp tục lấy ý kiến đối với dự thảo mới",
+        "note": "Đề nghị điều chỉnh thời hạn xử lý sang tháng 12/2026"
+    },
+    "Quyết định số 08/2017/QĐ-UBND": {
+        "status": "Đang xin chủ trương xây dựng Nghị quyết mới để thay thế Quyết định số 08/2017/QĐ-UBND. Bãi bỏ Quyết định này sau khi ban hành Nghị quyết",
+        "note": "Trễ hạn. Đề nghị điều chỉnh thời hạn xử lý sang tháng 12/2026"
+    },
+    "Quyết định số 38/2020/QĐ-UBND": {
+        "status": "Sở Tư pháp đã có BCTĐ số 99/BCTĐ-STP ngày 14/7/2026",
+        "note": "Thay đổi thời hạn xử lý thành tháng 12/2026"
+    },
+    "Quyết định số 39/2020/QĐ-UBND": {
+        "status": "Sở đã hoàn thiện dự thảo, trình UBND tỉnh ban hành tại Tờ trình số 584/TTr-SNNMT ngày 26/6/2026."
+    },
+    "Quyết định 28/2021/QĐ-UBND": {
+        "note": "Văn bản chịu tác động của sắp xếp tổ chức bộ máy. Đang tham mưu trình UBND tỉnh Quyết định định giá mới dưới hình thức quyết định hành chính theo quy định Trễ hạn"
+    },
+    "Quyết định số 09/2022/QĐ-UBND": {
+        "status": "Đang tổ chức lấy ý kiến góp ý dự thảo Quyết định của các Sở ban ngành tại Công văn số 7205/SNNMT-CCTLPCTT ngày 14/7/2026"
+    },
+    "Quyết định số 12/2022/QĐ-UBND": {
+        "status": "Sở đã lập danh mục văn bản quy định chi tiết và nội dung được giao thuộc thẩm quyền ban hành của UBND tỉnh gửi Sở Tư pháp tổng hơp tại Công văn số 6289/SNNMT-BVMT ngày 23/6/2026."
+    },
+    "Quyết định số 27/2022/QĐ-UBND": {
+        "status": "Đã hoàn thiện hồ sơ và trình UBND tỉnh ban hành Quyết định tại Tờ trình số 594/TTr-SNNMT ngày 29/6/2026"
+    },
+    "Quyết định số 06/2024/QĐ-UBND": {
+        "status": "Đang tổ chức lấy ý kiến góp ý dự thảo Quyết định của các Sở ban ngành tại Công văn số 7205/SNNMT-CCTLPCTT ngày 14/7/2026",
+        "note": "Xử lý đồng thời với Quyết định số 09/2022/QĐ-UBND. Thay đổi thời hạn xử lý thành tháng 12/2026"
+    },
+    "Quyết định số 09/2024/QĐ-UBND": {
+        "note": "Văn bản chịu tác động của sắp xếp tổ chức bộ máy. Thay đổi thời hạn xử lý thành Quý III/2026 Trễ hạn"
+    },
+    "Quyết định số 58/2024/QĐ-UBND": {
+        "status": "Đã thẩm định Dự thảo. Tuy nhiên, UBND tỉnh đã đồng ý lùi thời gian hành văn bản mới tại Công văn số 4129/UBND-CNXD ngày 30/3/2026. Đang tiếp tục lấy ý kiến góp ý",
+        "note": "Thay đổi thời hạn xử lý thành thánh 12/2026"
+    },
+    "Quyết định số 67/2024/QĐ-UBND": {
+        "note": "Đang lập Danh mục đề nghị bãi bỏ"
+    },
+    "Quyết định số 02/2025/QĐ-UBND": {
+        "status": "Đã hoàn thiện dự thảo Quyết định trình UBND tỉnh ban hành tại Tờ trình số 671/TTr-SNNMT ngày 14/7/2026"
+    },
+    "Quyết định số 08/2025/QĐ-UBND": {
+        "status": "Sở đã lập danh mục văn bản quy định chi tiết và nội dung được giao thuộc thẩm quyền ban hành của UBND tỉnh gửi Sở Tư pháp tại Công văn số 6289/SNNMT-BVMT ngày 23/6/2026."
+    },
+    "Quyết định số 14/2025/QĐ-UBND": {
+        "status": "Đang tiếp thu, giải trình ý kiến thẩm định"
+    },
+    "Quyết định số 25/2025/QĐ-UBND": {
+        "status": "Sở Tư pháp đã có BCTĐ số 92/BCTĐ-STP ngày 30/6/2026. Đang xd báo cáo tiếp thu ý kiến thẩm định"
+    },
+    "Quyết định số 27/2025/QĐ-UBND": {
+        "status": "Đang xây dựng Dự thảo Quyết định"
+    },
+    "Nghị quyết số 29/2017/NQ-HĐND": {
+        "status": "Đã lấy ý kiến thành viên UBND tỉnh đối với Danh mục văn bản quy định chi tiết theo Tờ trình số 165/TTr-STP ngày 06/7/2026; trong đó có Nghị quyết thay thế NQ 29/2017/NQ-HĐND"
+    },
+    "Nghị quyết số 04/2019/NQHĐND": {
+        "status": "Đã lấy ý kiến thành viên UBND tỉnh đối với Danh mục văn bản quy định chi tiết theo Tờ trình số 165/TTr-STP ngày 06/7/2026; trong đó có Nghị quyết thay thế NQ 04/2019/NQ-HĐND"
+    },
+    "Nghị quyết số 14/2024/NQ-HĐND": {
+        "status": "Đã lấy ý kiến thành viên UBND tỉnh đối với Danh mục văn bản quy định chi tiết theo Tờ trình số 165/TTr-STP ngày 06/7/2026; trong đó có Nghị quyết thay thế NQ 14/2024/NQ-HĐND"
+    },
+    "Quyết định số 31/2022/QĐ-UBND": {
+        "status": "Đang thẩm định Dự thảo Quyết định mới"
+    },
+    "Nghị quyết số 11/2020/NQ-HĐND": {
+        "status": "Đã lấy ý kiến thành viên UBND tỉnh đối với Danh mục văn bản quy định chi tiết theo Tờ trình số 165/TTr-STP ngày 06/7/2026; trong đó có Nghị quyết thay thế NQ 11/2020/NQ-HĐND"
+    },
+    "Nghị quyết số 20/2022/NQ-HĐND": {
+        "status": "Đã được chấp thuận chủ trương xây dựng văn bản; phân công cơ quan chủ trì soạn thảo tại Thông báo số 290/TB-UBND ngày 06/7/2026"
+    },
+    "Quyết định số 10/2017/QĐ-UBND": {
+        "status": "Đang thẩm định Dự thảo Quyết định mới"
+    },
+    "Nghị quyết số 13/2024/NQ-HĐND": {
+        "status": "Đã có Thông báo cơ quan chủ trì soạn thảo tại Thông báo số 311/TB-UBND"
+    },
+    "Quyết định số 45/2024/QĐ-UBND": {
+        "status": "Đang lấy ý kiến TVUBND tỉnh"
+    },
+    "Quyết định số 52/2024/QĐ-UBND": {
+        "status": "Đang lấy ý kiến TVUBND tỉnh"
+    },
+    "Quyết định số 70/2024/QĐ-UBND": {
+        "status": "Đang lấy ý kiến TVUBND tỉnh"
+    },
+    "Quyết định số 77/2024/QĐ-UBND": {
+        "status": "Đang thẩm định Dự thảo Quyết định mới"
+    },
+    "Quyết định số 79/2024/QĐ-UBND": {
+        "status": "Đang thẩm định Dự thảo Quyết định mới"
+    },
+    "Quyết định số 04/2025/QĐ-UBND": {
+        "status": "Đang lấy ý kiến TVUBND tỉnh"
+    },
+    "Quyết định số 17/2025/QĐ-UBND": {
+        "status": "Đang thẩm định Dự thảo Quyết định mới"
+    },
+    "Quyết định số 18/2025/QĐ-UBND": {
+        "status": "Đang thẩm định Dự thảo Quyết định mới"
+    },
+    "Nghị quyết 73/2012/NQ-HĐND": {
+        "status": "Đã trình TTHĐND tỉnh xin chủ trương xây dựng văn bản bãi bỏ"
+    },
+    "Nghị quyết 80/2016/NQ-HĐND": {
+        "status": "Đã trình TTHĐND tỉnh xin chủ trương xây dựng văn bản bãi bỏ"
+    },
+    "Nghị quyết 81/2016/NQ-HĐND": {
+        "status": "Đã trình TTHĐND tỉnh xin chủ trương xây dựng văn bản bãi bỏ"
+    },
+    "Nghị quyết 13/2023/NQ-HĐND": {
+        "status": "Đã trình TTHĐND tỉnh xin chủ trương xây dựng văn bản bãi bỏ"
+    },
+    "Quyết định 50/2023/QĐ-UBND": {
+        "status": "Đang lấy ý kiến góp ý đối với Dự thảo Quyết định bãi bỏ"
+    }
+}
 
 
 def norm(value: str) -> str:
@@ -79,7 +275,7 @@ def parse_docx_rows(data: bytes) -> dict[str, dict]:
             cells = [c for c in cells if c]
             if len(cells) < 4:
                 continue
-            name_index = next((i for i, text in enumerate(cells) if re.search(r"(Nghị quyết|Quyết định|Chỉ thị).{0,80}(NQ-HĐND|QĐ-UBND|CT-UBND)", text, re.I)), -1)
+            name_index = next((i for i, text in enumerate(cells) if re.search(r"(Nghị quyết|Quyết định|Chỉ thị).{0,180}(NQ[- ]?HĐND|NQ[- ]?HDND|NQHĐND|QĐ-UBND|CT-UBND)", text, re.I)), -1)
             if name_index < 0:
                 continue
             name = cells[name_index]
@@ -150,7 +346,7 @@ def phase_from(status: str, note: str = "") -> str:
     s = norm(f"{status} {note}")
     if not s or "chưa triển khai" in s or s.startswith("chưa"):
         return "Chưa triển khai"
-    if "đã xử lý" in s or "đã hoàn thành" in s or "bãi bỏ bởi" in s or "bãi bỏ tại" in s or "thay thế bằng" in s:
+    if "đã xử lý" in s or "đã hoàn thành" in s or "được bãi bỏ bởi" in s or "được bãi bỏ tại" in s or "thay thế bằng" in s:
         return "Đã hoàn thành"
     if "trình" in s or "thẩm định" in s or "bctđ" in s or "xin ý kiến thành viên" in s:
         return "Đã trình/thẩm định"
@@ -204,6 +400,31 @@ def normalize_active_phases(rows: list[dict]) -> int:
             row["priority"] = priority_from(row)
             fixed += 1
     return fixed
+
+
+def apply_manual_review_updates(source_rows: dict[str, dict]) -> int:
+    applied = 0
+    for match, fields in MANUAL_REVIEW_UPDATES.items():
+        match_key = norm(match)
+        target = next((row for key, row in source_rows.items() if match_key and match_key in key), None)
+        if not target:
+            continue
+        changed = False
+        for field, value in fields.items():
+            if value and clean(target.get(field, "")) != clean(value):
+                target[field] = value
+                changed = True
+        if changed:
+            applied += 1
+    return applied
+
+
+def max_vn_date(left: str, right: str) -> str:
+    left_dt = valid_progress_date(left) or parse_vn_date(left)
+    right_dt = valid_progress_date(right) or parse_vn_date(right)
+    if left_dt and right_dt:
+        return format_vn_date(max(left_dt, right_dt))
+    return right if right_dt else left
 
 
 def completion_event(row: dict, old: dict, as_of: str) -> dict:
@@ -372,10 +593,13 @@ def run(index_path: Path) -> None:
     done = load_json(source, "completedDataset")
     updates = load_json(source, "updatesDataset")
     source_rows = parse_docx_rows(download_docx())
+    manual_applied = apply_manual_review_updates(source_rows)
     if len(source_rows) < MIN_SOURCE_ROWS:
         raise RuntimeError(f"Nguồn Google Docs chỉ đọc được {len(source_rows)} dòng, thấp hơn ngưỡng an toàn {MIN_SOURCE_ROWS}; giữ nguyên dashboard cũ.")
     rows, done, updates, restored = restore_false_auto_completions(rows, done, updates)
     as_of = latest_date(rows, done, updates, source_rows)
+    if manual_applied:
+        as_of = max_vn_date(as_of, MANUAL_REVIEW_AS_OF)
     rows, done, updates, unmatched = update_rows(rows, done, updates, source_rows, as_of)
     fixed_phases = normalize_active_phases(rows)
     fixed_dates = normalize_future_dates(rows, as_of) + normalize_future_dates(done, as_of) + normalize_future_dates(updates, as_of)
@@ -388,6 +612,7 @@ def run(index_path: Path) -> None:
     index_path.write_text(source, encoding="utf-8")
     print(f"Đã rà soát Google Docs: còn {len(rows)} văn bản, hoàn thành {len(done)} văn bản, ngày cập nhật {as_of}.")
     print(f"Khôi phục {restored} văn bản bị đánh dấu hoàn thành nhầm; giữ nguyên {unmatched} văn bản chưa khớp chắc chắn với nguồn.")
+    print(f"Áp dụng rà soát 19/7/2026 cho {manual_applied} văn bản từ file Word người dùng cung cấp.")
     print(f"Đã chuẩn hóa {fixed_phases} văn bản còn sót trạng thái Khác.")
     print(f"Đã chuẩn hóa {fixed_dates} mốc ngày cập nhật tương lai không hợp lệ.")
 
