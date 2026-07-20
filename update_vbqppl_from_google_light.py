@@ -195,6 +195,17 @@ def normalize_future_dates(items: list[dict], fallback_date: str) -> int:
     return fixed
 
 
+def normalize_active_phases(rows: list[dict]) -> int:
+    fixed = 0
+    for row in rows:
+        if row.get("phase") == "Khác":
+            phase = phase_from(row.get("status", ""), row.get("note", ""))
+            row["phase"] = "Đang thực hiện" if phase == "Đã hoàn thành" else phase
+            row["priority"] = priority_from(row)
+            fixed += 1
+    return fixed
+
+
 def completion_event(row: dict, old: dict, as_of: str) -> dict:
     return {
         "stt": row.get("stt", ""),
@@ -366,6 +377,7 @@ def run(index_path: Path) -> None:
     rows, done, updates, restored = restore_false_auto_completions(rows, done, updates)
     as_of = latest_date(rows, done, updates, source_rows)
     rows, done, updates, unmatched = update_rows(rows, done, updates, source_rows, as_of)
+    fixed_phases = normalize_active_phases(rows)
     fixed_dates = normalize_future_dates(rows, as_of) + normalize_future_dates(done, as_of) + normalize_future_dates(updates, as_of)
     done.sort(key=lambda row: date_key(row.get("completedAt", "")), reverse=True)
     updates.sort(key=lambda row: (date_key(row.get("updatedAt", "")), 1 if row.get("newPhase") == "Đã hoàn thành" else 0), reverse=True)
@@ -376,6 +388,7 @@ def run(index_path: Path) -> None:
     index_path.write_text(source, encoding="utf-8")
     print(f"Đã rà soát Google Docs: còn {len(rows)} văn bản, hoàn thành {len(done)} văn bản, ngày cập nhật {as_of}.")
     print(f"Khôi phục {restored} văn bản bị đánh dấu hoàn thành nhầm; giữ nguyên {unmatched} văn bản chưa khớp chắc chắn với nguồn.")
+    print(f"Đã chuẩn hóa {fixed_phases} văn bản còn sót trạng thái Khác.")
     print(f"Đã chuẩn hóa {fixed_dates} mốc ngày cập nhật tương lai không hợp lệ.")
 
 
