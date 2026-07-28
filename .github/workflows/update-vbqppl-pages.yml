@@ -62,3 +62,5 @@ jobs:
             git commit -m "Tự động cập nhật dashboard VBQPPL từ Google Docs"
             git push
           fi
+
+# Manual refresh requested: 2026-07-28 16:30 Asia/Ho_Chi_Minh
