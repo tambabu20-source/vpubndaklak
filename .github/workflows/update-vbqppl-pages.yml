@@ -36,6 +36,39 @@ jobs:
           set -euo pipefail
           python update_vbqppl_from_google_light.py --index index.html --allow-source-failure
 
+      - name: Bổ sung nhãn nguồn Google Docs gốc
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          source = path.read_text(encoding='utf-8')
+          doc_url = 'https://docs.google.com/document/d/1lM3yY0Z8IQYFF9IN7YyKvqvb4MvNkSfKCNJPN_H-a6o/edit?usp=sharing'
+
+          if '.source-strip' not in source:
+              source = source.replace(
+                  '    main.wrap { padding-top: 18px; }',
+                  '    main.wrap { padding-top: 18px; }\n'
+                  '    .source-strip { padding-top: 10px; padding-bottom: 0; }\n'
+                  '    .source-link { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--blue); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; text-decoration: none; }\n'
+                  '    .source-link:hover { background: #dbeafe; }'
+              )
+
+          if 'id="sourceDocLink"' not in source:
+              source = source.replace(
+                  '  </header>\n  <main class="wrap">',
+                  '  </header>\n'
+                  '  <div class="wrap source-strip">\n'
+                  f'    <a id="sourceDocLink" class="source-link" href="{doc_url}" target="_blank" rel="noopener">Xem nguồn Google Docs gốc</a>\n'
+                  '  </div>\n'
+                  '  <main class="wrap">'
+              )
+
+          path.write_text(source, encoding='utf-8')
+          PY
+
       - name: Kiểm tra dashboard sau cập nhật
         shell: bash
         run: |
@@ -45,6 +78,7 @@ jobs:
           grep -q 'id="dataset"' index.html
           grep -q 'id="completedDataset"' index.html
           grep -q 'id="updatesDataset"' index.html
+          grep -q 'id="sourceDocLink"' index.html
           grep -q "Tóm tắt tiến độ xử lý" index.html
           grep -q "Cập nhật tiến độ mới nhất" index.html
           echo "Dashboard VBQPPL đang sẵn sàng."
@@ -62,5 +96,3 @@ jobs:
             git commit -m "Tự động cập nhật dashboard VBQPPL từ Google Docs"
             git push
           fi
-
-# Manual refresh requested: 2026-07-28 16:30 Asia/Ho_Chi_Minh
