@@ -41,11 +41,13 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path('index.html')
           source = path.read_text(encoding='utf-8')
           doc_url = 'https://docs.google.com/document/d/1lM3yY0Z8IQYFF9IN7YyKvqvb4MvNkSfKCNJPN_H-a6o/edit?usp=sharing'
+          source_label = 'Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30'
 
           if '.source-strip' not in source:
               source = source.replace(
@@ -55,6 +57,22 @@ jobs:
                   '    .source-link { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--blue); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; text-decoration: none; }\n'
                   '    .source-link:hover { background: #dbeafe; }'
               )
+
+          if '.pill-link' not in source:
+              source = source.replace(
+                  '    .pill { border: 1px solid var(--line); background: #fff; color: #344054; border-radius: 999px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }',
+                  '    .pill { border: 1px solid var(--line); background: #fff; color: #344054; border-radius: 999px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }\n'
+                  '    .pill-link { text-decoration: none; cursor: pointer; }\n'
+                  '    .pill-link:hover { border-color: #bfdbfe; background: #eff6ff; color: var(--blue); }'
+              )
+
+          header_anchor = f'<a id="headerSourceDocLink" class="pill pill-link" href="{doc_url}" target="_blank" rel="noopener" title="Mở nguồn Google Docs chính">{source_label}</a>'
+          source = re.sub(
+              r'<(?:span|a)\b[^>]*>Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30</(?:span|a)>',
+              header_anchor,
+              source,
+              count=1,
+          )
 
           if 'id="sourceDocLink"' not in source:
               source = source.replace(
@@ -79,6 +97,7 @@ jobs:
           grep -q 'id="completedDataset"' index.html
           grep -q 'id="updatesDataset"' index.html
           grep -q 'id="sourceDocLink"' index.html
+          grep -q 'id="headerSourceDocLink"' index.html
           grep -q "Tóm tắt tiến độ xử lý" index.html
           grep -q "Cập nhật tiến độ mới nhất" index.html
           echo "Dashboard VBQPPL đang sẵn sàng."
