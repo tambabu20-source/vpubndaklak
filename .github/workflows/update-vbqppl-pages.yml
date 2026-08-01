@@ -36,221 +36,111 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-
           path = Path('update_vbqppl_from_google_light.py')
           source = path.read_text(encoding='utf-8')
-
-          if 'current_field = ""' not in source:
-              source = source.replace(
-                  '    rows: dict[str, dict] = {}\n    for table in root.findall(".//w:tbl", ns):',
-                  '    rows: dict[str, dict] = {}\n    current_field = ""\n    for table in root.findall(".//w:tbl", ns):'
-              )
-
-          if 'len(cells) >= 2 and re.match(r"^[IVXLCDM]+$"' not in source:
-              source = source.replace(
-                  '            if len(cells) < 4:\n                continue',
-                  '            if len(cells) >= 2 and re.match(r"^[IVXLCDM]+$", cells[0], re.I):\n'
-                  '                current_field = re.sub(r"\\s*\\(.*$", "", cells[1]).replace("Lĩnh vực", "").strip() or current_field\n'
-                  '                continue\n'
-                  '            if len(cells) < 2:\n'
-                  '                continue'
-              )
-
-          if '"matchKey": base_key' not in source:
-              source = source.replace(
-                  '            name = cells[name_index]\n            following = cells[name_index + 1 :]\n            rows[norm(name)] = {\n                "name": name,',
-                  '            name = cells[name_index]\n'
-                  '            base_key = norm(name)\n'
-                  '            key = base_key\n'
-                  '            duplicate_index = 2\n'
-                  '            while key in rows:\n'
-                  '                key = f"{base_key} ##{duplicate_index}"\n'
-                  '                duplicate_index += 1\n'
-                  '            following = cells[name_index + 1 :]\n'
-                  '            rows[key] = {\n'
-                  '                "name": name,\n'
-                  '                "matchKey": base_key,\n'
-                  '                "field": current_field,'
-              )
-
-          source = source.replace(
-              '"đã xử lý" in s or "đã hoàn thành" in s or "được bãi bỏ bởi"',
-              '"đã xử lý" in s or "đã hoàn thành xử lý" in s or "được bãi bỏ bởi"'
-          )
-
-          new_find_source = '''def find_source(row: dict, source_rows: dict[str, dict], used_source_keys: set[str] | None = None) -> tuple[str, dict] | None:
-              used_source_keys = used_source_keys or set()
-              key = norm(row.get("name", ""))
-              if key in source_rows and key not in used_source_keys:
-                  return key, source_rows[key]
-              return next(
-                  (
-                      (source_key, value)
-                      for source_key, value in source_rows.items()
-                      if source_key not in used_source_keys
-                      and key
-                      and (value.get("matchKey") == key or key in value.get("matchKey", source_key) or value.get("matchKey", source_key) in key)
-                  ),
-                  None,
-              )
-          '''.replace('\n              ', '\n')
-
+          source = source.replace('    rows: dict[str, dict] = {}\n    for table in root.findall(".//w:tbl", ns):', '    rows: dict[str, dict] = {}\n    current_field = ""\n    for table in root.findall(".//w:tbl", ns):')
+          source = source.replace('            if len(cells) < 4:\n                continue', '            if len(cells) >= 2 and re.match(r"^[IVXLCDM]+$", cells[0], re.I):\n                current_field = re.sub(r"\\s*\\(.*$", "", cells[1]).replace("Lĩnh vực", "").strip() or current_field\n                continue\n            if len(cells) < 2:\n                continue')
+          source = source.replace('            name = cells[name_index]\n            following = cells[name_index + 1 :]\n            rows[norm(name)] = {\n                "name": name,', '            name = cells[name_index]\n            base_key = norm(name)\n            key = base_key\n            duplicate_index = 2\n            while key in rows:\n                key = f"{base_key} ##{duplicate_index}"\n                duplicate_index += 1\n            following = cells[name_index + 1 :]\n            rows[key] = {\n                "name": name,\n                "matchKey": base_key,\n                "field": current_field,')
+          source = source.replace('"đã xử lý" in s or "đã hoàn thành" in s or "được bãi bỏ bởi"', '"đã xử lý" in s or "đã hoàn thành xử lý" in s or "được bãi bỏ bởi"')
           start = source.index('def find_source(')
           end = source.index('\ndef event_key(', start)
-          source = source[:start] + new_find_source + source[end:]
-
-          new_update_rows = '''def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_rows: dict[str, dict], as_of: str) -> tuple[list[dict], list[dict], list[dict], int]:
-              existing_events = {event_key(event) for event in updates}
-              done_names = {norm(row.get("name", "")) for row in done}
-              active: list[dict] = []
-              unmatched = 0
-              used_source_keys: set[str] = set()
-
-              for row in rows:
-                  found = find_source(row, source_rows, used_source_keys)
-                  if not found:
-                      unmatched += 1
-                      old = {k: row.get(k, "") for k in ("status", "phase", "priority")}
-                      item = dict(row)
-                      item.update({
-                          "completed": True,
-                          "completedAt": as_of,
-                          "updatedAt": as_of,
-                          "recentUpdate": True,
-                          "phase": "Đã hoàn thành",
-                          "priority": "Hoàn thành",
-                          "status": FALSE_AUTO_PROGRESS,
-                      })
-                      item_key = norm(item.get("name", ""))
-                      if item_key not in done_names:
-                          done.append(item)
-                          done_names.add(item_key)
-                      event = {
-                          "stt": row.get("stt", ""),
-                          "name": row.get("name", ""),
-                          "field": row.get("field", ""),
-                          "agency": row.get("agency", ""),
-                          "updatedAt": as_of,
-                          "oldPhase": old.get("phase", ""),
-                          "newPhase": "Đã hoàn thành",
-                          "oldPriority": old.get("priority", ""),
-                          "newPriority": "Hoàn thành",
-                          "progress": FALSE_AUTO_PROGRESS,
-                          "highlight": True,
-                          "changes": [{"label": "Tình trạng", "old": old.get("status", ""), "new": FALSE_AUTO_PROGRESS}],
-                      }
-                      if event_key(event) not in existing_events:
-                          updates.append(event)
-                          existing_events.add(event_key(event))
-                      continue
-                  source_key, src = found
-                  used_source_keys.add(source_key)
-
-                  old = {k: row.get(k, "") for k in ("action", "proposedTime", "deadline", "status", "note", "phase", "priority")}
-                  for key in ("action", "proposedTime", "deadline", "status", "note"):
-                      if src.get(key):
-                          row[key] = src[key]
-                  if src.get("field"):
-                      row["field"] = src["field"]
-                  row["deadlineMonth"] = month_from(row.get("deadline", "")) or row.get("deadlineMonth")
-                  row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
-                  row["priority"] = priority_from(row)
-
-                  if row["phase"] == "Đã hoàn thành":
-                      item = dict(row)
-                      item.update({"completed": True, "completedAt": as_of, "updatedAt": as_of, "recentUpdate": True})
-                      if norm(item.get("name", "")) not in done_names:
-                          done.append(item)
-                          done_names.add(norm(item.get("name", "")))
-                      event = completion_event(item, old, as_of)
-                      if event_key(event) not in existing_events:
-                          updates.append(event)
-                          existing_events.add(event_key(event))
-                      continue
-
-                  changes = []
-                  labels = {"action": "Hình thức xử lý", "proposedTime": "Thời gian sở/ngành đề xuất", "deadline": "Thời hạn UBND", "status": "Tình trạng", "note": "Ghi chú"}
-                  for key, label in labels.items():
-                      if clean(old.get(key, "")) != clean(row.get(key, "")):
-                          changes.append({"label": label, "old": old.get(key, ""), "new": row.get(key, "")})
-                  if changes:
-                      row["recentUpdate"] = True
-                      row["updatedAt"] = as_of
-                      event = {
-                          "stt": row.get("stt", ""),
-                          "name": row.get("name", ""),
-                          "field": row.get("field", ""),
-                          "agency": row.get("agency", ""),
-                          "updatedAt": as_of,
-                          "oldPhase": old.get("phase", ""),
-                          "newPhase": row.get("phase", ""),
-                          "oldPriority": old.get("priority", ""),
-                          "newPriority": row.get("priority", ""),
-                          "progress": row.get("status", ""),
-                          "changes": changes,
-                      }
-                      if event_key(event) not in existing_events:
-                          updates.append(event)
-                          existing_events.add(event_key(event))
-                  active.append(row)
-
-              template_by_field = {}
-              for row in rows + done:
-                  if row.get("field") and row.get("agency"):
-                      template_by_field.setdefault(row["field"], row)
-
-              for source_key, src in source_rows.items():
-                  if source_key in used_source_keys:
-                      continue
-                  field = src.get("field") or "Khác"
-                  template = template_by_field.get(field, {})
-                  row = {
-                      "stt": len(active) + 1,
-                      "name": src.get("name", ""),
-                      "type": "Nghị quyết" if re.search(r"Nghị quyết", src.get("name", ""), re.I) else ("Chỉ thị" if re.search(r"Chỉ thị", src.get("name", ""), re.I) else "Quyết định"),
-                      "province": "Phú Yên" if "Phú Yên" in src.get("name", "") else "Đắk Lắk",
-                      "agency": template.get("agency") or ("Các ban của HĐND tỉnh" if "HĐND" in src.get("name", "") else "UBND tỉnh"),
-                      "agencies": template.get("agencies") or ([template.get("agency")] if template.get("agency") else ["Các ban của HĐND tỉnh" if "HĐND" in src.get("name", "") else "UBND tỉnh"]),
-                      "field": field,
-                      "action": src.get("action", ""),
-                      "proposedTime": src.get("proposedTime", ""),
-                      "deadline": src.get("deadline", ""),
-                      "deadlineMonth": month_from(src.get("deadline", "")),
-                      "status": src.get("status", ""),
-                      "note": src.get("note", ""),
-                      "completed": False,
-                      "recentUpdate": True,
-                      "updatedAt": as_of,
-                  }
-                  row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
-                  row["priority"] = priority_from(row)
-                  active.append(row)
-                  event = {
-                      "stt": row.get("stt", ""),
-                      "name": row.get("name", ""),
-                      "field": row.get("field", ""),
-                      "agency": row.get("agency", ""),
-                      "updatedAt": as_of,
-                      "oldPhase": "",
-                      "newPhase": row.get("phase", ""),
-                      "oldPriority": "",
-                      "newPriority": row.get("priority", ""),
-                      "progress": row.get("status", "") or "Được bổ sung từ nguồn Google Docs chính",
-                      "changes": [{"label": "Bổ sung từ nguồn chính", "old": "", "new": "Có trong Google Docs nguồn chính"}],
-                  }
-                  if event_key(event) not in existing_events:
-                      updates.append(event)
-                      existing_events.add(event_key(event))
-
-              for index, row in enumerate(active, start=1):
-                  row["stt"] = index
-              return active, done, updates, unmatched
-          '''.replace('\n              ', '\n')
-
+          source = source[:start] + '''def find_source(row: dict, source_rows: dict[str, dict], used_source_keys: set[str] | None = None) -> tuple[str, dict] | None:
+    used_source_keys = used_source_keys or set()
+    key = norm(row.get("name", ""))
+    if key in source_rows and key not in used_source_keys:
+        return key, source_rows[key]
+    return next(
+        (
+            (source_key, value)
+            for source_key, value in source_rows.items()
+            if source_key not in used_source_keys
+            and key
+            and (value.get("matchKey") == key or key in value.get("matchKey", source_key) or value.get("matchKey", source_key) in key)
+        ),
+        None,
+    )
+''' + source[end:]
           start = source.index('def update_rows(')
           end = source.index('\ndef date_key(', start)
-          source = source[:start] + new_update_rows + source[end:]
+          source = source[:start] + '''def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_rows: dict[str, dict], as_of: str) -> tuple[list[dict], list[dict], list[dict], int]:
+    existing_events = {event_key(event) for event in updates}
+    done_names = {norm(row.get("name", "")) for row in done}
+    active: list[dict] = []
+    unmatched = 0
+    used_source_keys: set[str] = set()
 
+    for row in rows:
+        found = find_source(row, source_rows, used_source_keys)
+        if not found:
+            unmatched += 1
+            old = {k: row.get(k, "") for k in ("status", "phase", "priority")}
+            item = dict(row)
+            item.update({"completed": True, "completedAt": as_of, "updatedAt": as_of, "recentUpdate": True, "phase": "Đã hoàn thành", "priority": "Hoàn thành", "status": FALSE_AUTO_PROGRESS})
+            item_key = norm(item.get("name", ""))
+            if item_key not in done_names:
+                done.append(item)
+                done_names.add(item_key)
+            event = {"stt": row.get("stt", ""), "name": row.get("name", ""), "field": row.get("field", ""), "agency": row.get("agency", ""), "updatedAt": as_of, "oldPhase": old.get("phase", ""), "newPhase": "Đã hoàn thành", "oldPriority": old.get("priority", ""), "newPriority": "Hoàn thành", "progress": FALSE_AUTO_PROGRESS, "highlight": True, "changes": [{"label": "Tình trạng", "old": old.get("status", ""), "new": FALSE_AUTO_PROGRESS}]}
+            if event_key(event) not in existing_events:
+                updates.append(event)
+                existing_events.add(event_key(event))
+            continue
+        source_key, src = found
+        used_source_keys.add(source_key)
+        old = {k: row.get(k, "") for k in ("action", "proposedTime", "deadline", "status", "note", "phase", "priority")}
+        for key in ("action", "proposedTime", "deadline", "status", "note"):
+            if src.get(key):
+                row[key] = src[key]
+        if src.get("field"):
+            row["field"] = src["field"]
+        row["deadlineMonth"] = month_from(row.get("deadline", "")) or row.get("deadlineMonth")
+        row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
+        row["priority"] = priority_from(row)
+        if row["phase"] == "Đã hoàn thành":
+            item = dict(row)
+            item.update({"completed": True, "completedAt": as_of, "updatedAt": as_of, "recentUpdate": True})
+            if norm(item.get("name", "")) not in done_names:
+                done.append(item)
+                done_names.add(norm(item.get("name", "")))
+            event = completion_event(item, old, as_of)
+            if event_key(event) not in existing_events:
+                updates.append(event)
+                existing_events.add(event_key(event))
+            continue
+        changes = []
+        labels = {"action": "Hình thức xử lý", "proposedTime": "Thời gian sở/ngành đề xuất", "deadline": "Thời hạn UBND", "status": "Tình trạng", "note": "Ghi chú"}
+        for key, label in labels.items():
+            if clean(old.get(key, "")) != clean(row.get(key, "")):
+                changes.append({"label": label, "old": old.get(key, ""), "new": row.get(key, "")})
+        if changes:
+            row["recentUpdate"] = True
+            row["updatedAt"] = as_of
+            event = {"stt": row.get("stt", ""), "name": row.get("name", ""), "field": row.get("field", ""), "agency": row.get("agency", ""), "updatedAt": as_of, "oldPhase": old.get("phase", ""), "newPhase": row.get("phase", ""), "oldPriority": old.get("priority", ""), "newPriority": row.get("priority", ""), "progress": row.get("status", ""), "changes": changes}
+            if event_key(event) not in existing_events:
+                updates.append(event)
+                existing_events.add(event_key(event))
+        active.append(row)
+    template_by_field = {}
+    for row in rows + done:
+        if row.get("field") and row.get("agency"):
+            template_by_field.setdefault(row["field"], row)
+    for source_key, src in source_rows.items():
+        if source_key in used_source_keys:
+            continue
+        field = src.get("field") or "Khác"
+        template = template_by_field.get(field, {})
+        row = {"stt": len(active) + 1, "name": src.get("name", ""), "type": "Nghị quyết" if re.search(r"Nghị quyết", src.get("name", ""), re.I) else ("Chỉ thị" if re.search(r"Chỉ thị", src.get("name", ""), re.I) else "Quyết định"), "province": "Phú Yên" if "Phú Yên" in src.get("name", "") else "Đắk Lắk", "agency": template.get("agency") or ("Các ban của HĐND tỉnh" if "HĐND" in src.get("name", "") else "UBND tỉnh"), "agencies": template.get("agencies") or ([template.get("agency")] if template.get("agency") else ["Các ban của HĐND tỉnh" if "HĐND" in src.get("name", "") else "UBND tỉnh"]), "field": field, "action": src.get("action", ""), "proposedTime": src.get("proposedTime", ""), "deadline": src.get("deadline", ""), "deadlineMonth": month_from(src.get("deadline", "")), "status": src.get("status", ""), "note": src.get("note", ""), "completed": False, "recentUpdate": True, "updatedAt": as_of}
+        row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
+        row["priority"] = priority_from(row)
+        active.append(row)
+        event = {"stt": row.get("stt", ""), "name": row.get("name", ""), "field": row.get("field", ""), "agency": row.get("agency", ""), "updatedAt": as_of, "oldPhase": "", "newPhase": row.get("phase", ""), "oldPriority": "", "newPriority": row.get("priority", ""), "progress": row.get("status", "") or "Được bổ sung từ nguồn Google Docs chính", "changes": [{"label": "Bổ sung từ nguồn chính", "old": "", "new": "Có trong Google Docs nguồn chính"}]}
+        if event_key(event) not in existing_events:
+            updates.append(event)
+            existing_events.add(event_key(event))
+    for index, row in enumerate(active, start=1):
+        row["stt"] = index
+    return active, done, updates, unmatched
+''' + source[end:]
           path.write_text(source, encoding='utf-8')
           PY
           python -m py_compile update_vbqppl_from_google_light.py
@@ -268,47 +158,18 @@ jobs:
           python - <<'PY'
           import re
           from pathlib import Path
-
           path = Path('index.html')
           source = path.read_text(encoding='utf-8')
           doc_url = 'https://docs.google.com/document/d/1lM3yY0Z8IQYFF9IN7YyKvqvb4MvNkSfKCNJPN_H-a6o/edit?usp=sharing'
           source_label = 'Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30'
-
           if '.source-strip' not in source:
-              source = source.replace(
-                  '    main.wrap { padding-top: 18px; }',
-                  '    main.wrap { padding-top: 18px; }\n'
-                  '    .source-strip { padding-top: 10px; padding-bottom: 0; }\n'
-                  '    .source-link { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--blue); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; text-decoration: none; }\n'
-                  '    .source-link:hover { background: #dbeafe; }'
-              )
-
+              source = source.replace('    main.wrap { padding-top: 18px; }', '    main.wrap { padding-top: 18px; }\n    .source-strip { padding-top: 10px; padding-bottom: 0; }\n    .source-link { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--blue); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700; text-decoration: none; }\n    .source-link:hover { background: #dbeafe; }')
           if '.pill-link' not in source:
-              source = source.replace(
-                  '    .pill { border: 1px solid var(--line); background: #fff; color: #344054; border-radius: 999px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }',
-                  '    .pill { border: 1px solid var(--line); background: #fff; color: #344054; border-radius: 999px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }\n'
-                  '    .pill-link { text-decoration: none; cursor: pointer; }\n'
-                  '    .pill-link:hover { border-color: #bfdbfe; background: #eff6ff; color: var(--blue); }'
-              )
-
+              source = source.replace('    .pill { border: 1px solid var(--line); background: #fff; color: #344054; border-radius: 999px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }', '    .pill { border: 1px solid var(--line); background: #fff; color: #344054; border-radius: 999px; padding: 7px 10px; font-size: 12px; white-space: nowrap; }\n    .pill-link { text-decoration: none; cursor: pointer; }\n    .pill-link:hover { border-color: #bfdbfe; background: #eff6ff; color: var(--blue); }')
           header_anchor = f'<a id="headerSourceDocLink" class="pill pill-link" href="{doc_url}" target="_blank" rel="noopener" title="Mở nguồn Google Docs chính">{source_label}</a>'
-          source = re.sub(
-              r'<(?:span|a)\b[^>]*>Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30</(?:span|a)>',
-              header_anchor,
-              source,
-              count=1,
-          )
-
+          source = re.sub(r'<(?:span|a)\b[^>]*>Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30</(?:span|a)>', header_anchor, source, count=1)
           if 'id="sourceDocLink"' not in source:
-              source = source.replace(
-                  '  </header>\n  <main class="wrap">',
-                  '  </header>\n'
-                  '  <div class="wrap source-strip">\n'
-                  f'    <a id="sourceDocLink" class="source-link" href="{doc_url}" target="_blank" rel="noopener">Xem nguồn Google Docs gốc</a>\n'
-                  '  </div>\n'
-                  '  <main class="wrap">'
-              )
-
+              source = source.replace('  </header>\n  <main class="wrap">', '  </header>\n  <div class="wrap source-strip">\n' + f'    <a id="sourceDocLink" class="source-link" href="{doc_url}" target="_blank" rel="noopener">Xem nguồn Google Docs gốc</a>\n' + '  </div>\n  <main class="wrap">')
           path.write_text(source, encoding='utf-8')
           PY
 
