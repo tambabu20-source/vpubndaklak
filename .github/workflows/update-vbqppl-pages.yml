@@ -3,7 +3,6 @@ name: Cập nhật dashboard VBQPPL
 on:
   push:
     paths:
-      - index.html
       - update_vbqppl_from_google_light.py
       - .github/workflows/update-vbqppl-pages.yml
   schedule:
@@ -47,18 +46,26 @@ jobs:
                   return y, m, d
               return max(labels, key=key) if labels else None
 
+          def remaining_count(source):
+              match = re.search(r"Đang theo dõi:\s*(\d+)\s*văn bản", source)
+              return int(match.group(1)) if match else None
+
           before_path = Path('/tmp/index-before-vbqppl.html')
           index_path = Path('index.html')
           before = before_path.read_text(encoding='utf-8')
           after = index_path.read_text(encoding='utf-8')
           before_date = newest_date(before)
           after_date = newest_date(after)
+          before_remaining = remaining_count(before)
+          after_remaining = remaining_count(after)
           if before_date and after_date:
               bd = tuple(map(int, before_date.split('/')[::-1]))
               ad = tuple(map(int, after_date.split('/')[::-1]))
-              if ad < bd:
+              source_is_stale = ad < bd
+              source_increases_same_period = ad <= bd and before_remaining is not None and after_remaining is not None and after_remaining > before_remaining
+              if source_is_stale or source_increases_same_period:
                   index_path.write_text(before, encoding='utf-8')
-                  print(f"Nguồn Google Docs cũ hơn dashboard hiện có ({after_date} < {before_date}); giữ nguyên dashboard.")
+                  print(f"Nguồn Google Docs chưa khớp báo cáo hiện có ({after_date}, {after_remaining} văn bản); giữ nguyên dashboard ({before_date}, {before_remaining} văn bản).")
           PY
 
       - name: Bổ sung nhãn nguồn Google Docs gốc
