@@ -368,6 +368,8 @@
     const tagColor = value => value === 'Rất gấp' ? 'red' : value === 'Cao' ? 'amber' : value === 'Theo dõi ban hành' ? 'blue' : value === 'Theo kế hoạch' ? 'green' : value === 'Hoàn thành' || value === 'Đã hoàn thành' ? 'green' : value === 'Đã trình/thẩm định' ? 'blue' : value === 'Đang thực hiện' ? 'green' : value === 'Chưa triển khai' ? 'red' : 'gray';
     const unique = (arr) => [...new Set(arr.filter(Boolean))].sort((a,b) => a.localeCompare(b, 'vi'));
     const countBy = (arr, key) => arr.reduce((m, r) => (m[r[key]] = (m[r[key]] || 0) + 1, m), {});
+    const fieldKey = value => String(value || '').trim().toLocaleLowerCase('vi-VN');
+    const fieldMatches = (actual, selected) => !selected || fieldKey(actual) === fieldKey(selected);
     const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const labelMonth = m => m ? `Tháng ${m}/2026` : 'Chưa rõ hạn';
     const parseUpdateDate = value => {
@@ -463,7 +465,7 @@
         const hay = [r.stt, r.name, r.action, r.deadline, r.status, r.note, r.field, r.agency, ...r.agencies].join(' ').toLowerCase();
         return (!q || hay.includes(q))
           && (!els.agency.value || r.agency === els.agency.value)
-          && (!els.field.value || r.field === els.field.value)
+          && fieldMatches(r.field, els.field.value)
           && (!els.phase.value || r.phase === els.phase.value)
           && (!els.priority.value || r.priority === els.priority.value)
           && (!els.deadline.value || labelMonth(r.deadlineMonth) === els.deadline.value)
@@ -505,16 +507,20 @@
       const counts = countBy(rows, 'field');
       const updatedSource = [...rows, ...completedData.filter(r => isRecentCompletion(r))];
       const updated = updatedSource.reduce((m, r) => {
-        if (isRecentUpdate(r)) m[r.field] = (m[r.field] || 0) + 1;
-        else if (isRecentCompletion(r)) m[r.field] = (m[r.field] || 0) + 1;
+        const key = fieldKey(r.field);
+        if (!key) return m;
+        if (isRecentUpdate(r)) m[key] = (m[key] || 0) + 1;
+        else if (isRecentCompletion(r)) m[key] = (m[key] || 0) + 1;
         return m;
       }, {});
       const completedRecent = completedData.reduce((m, r) => {
-        if (isRecentCompletion(r)) m[r.field] = (m[r.field] || 0) + 1;
+        const key = fieldKey(r.field);
+        if (key && isRecentCompletion(r)) m[key] = (m[key] || 0) + 1;
         return m;
       }, {});
       const completedAll = completedData.reduce((m, r) => {
-        if (r.field) m[r.field] = (m[r.field] || 0) + 1;
+        const key = fieldKey(r.field);
+        if (key) m[key] = (m[key] || 0) + 1;
         return m;
       }, {});
       const entries = Object.entries(counts).sort((a,b) => b[1]-a[1]);
@@ -523,7 +529,10 @@
       const totalProcessed = Math.max(0, totalScope - data.length);
       const totalUpdated = rows.filter(r => isRecentUpdate(r)).length + completedData.filter(r => isRecentCompletion(r)).length;
       const totalCompletedRecent = completedData.filter(r => isRecentCompletion(r)).length;
-      const targetHtml = entries.map(([name, count], i) => `<div class="bar-row"><span title="${escapeHtml(name)}">${escapeHtml(name)}</span><div class="track"><div class="fill ${colors[i % colors.length]}" style="width:${Math.max(4, count / max * 100)}%"></div></div><span class="completed-count">${completedAll[name] ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(name)}">${completedAll[name]}</button>` : ''}</span><strong><button class="metric-link" data-filter="field" data-field="${escapeHtml(name)}">${count}</button></strong><span class="updated-count">${updated[name] ? `<button class="metric-link" data-filter="field" data-field="${escapeHtml(name)}">${updated[name]}</button>` : ''}</span><span class="completed-count">${completedRecent[name] ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(name)}">${completedRecent[name]}</button>` : ''}</span></div>`).join('');
+      const targetHtml = entries.map(([name, count], i) => {
+        const key = fieldKey(name);
+        return `<div class="bar-row"><span title="${escapeHtml(name)}">${escapeHtml(name)}</span><div class="track"><div class="fill ${colors[i % colors.length]}" style="width:${Math.max(4, count / max * 100)}%"></div></div><span class="completed-count">${completedAll[key] ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(name)}">${completedAll[key]}</button>` : ''}</span><strong><button class="metric-link" data-filter="field" data-field="${escapeHtml(name)}">${count}</button></strong><span class="updated-count">${updated[key] ? `<button class="metric-link" data-filter="field" data-field="${escapeHtml(name)}">${updated[key]}</button>` : ''}</span><span class="completed-count">${completedRecent[key] ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(name)}">${completedRecent[key]}</button>` : ''}</span></div>`;
+      }).join('');
       els.fieldBars.innerHTML = `<div class="bar-row bar-head"><span>Lĩnh vực</span><span></span><span>Đã xử lý hoàn thành</span><span>Tổng VB còn lại</span><span>Cập nhật tuần qua</span><span>Hoàn thành tuần qua</span></div><div class="bar-row bar-total"><span>Tổng cộng</span><span></span><span class="completed-count">${totalProcessed}</span><strong><button class="metric-link" data-filter="all">${totalRows}</button></strong><span class="updated-count">${totalUpdated ? `<button class="metric-link" data-filter="all">${totalUpdated}</button>` : ''}</span><span class="completed-count">${totalCompletedRecent ? `<button class="metric-link" data-filter="completed">${totalCompletedRecent}</button>` : ''}</span></div>${targetHtml}`;
     }
 
@@ -730,7 +739,7 @@
         const hay = [r.stt, r.name, r.action, r.deadline, r.status, r.note, r.field, r.agency, ...r.agencies].join(' ').toLowerCase();
         return (!q || hay.includes(q))
           && (!els.agency.value || r.agency === els.agency.value)
-          && (!els.field.value || r.field === els.field.value)
+          && fieldMatches(r.field, els.field.value)
           && (!els.phase.value || r.phase === els.phase.value)
           && (!els.priority.value || r.priority === els.priority.value)
           && (!els.deadline.value || labelMonth(r.deadlineMonth) === els.deadline.value)
