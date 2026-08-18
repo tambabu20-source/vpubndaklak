@@ -78,7 +78,7 @@ jobs:
 
           path = Path('index.html')
           source = path.read_text(encoding='utf-8')
-          doc_url = 'https://docs.google.com/document/d/1lM3yY0Z8IQYFF9IN7YyKvqvb4MvNkSfKCNJPN_H-a6o/edit?usp=sharing'
+          doc_url = 'https://docs.google.com/document/d/1_HiwkPbV28TVh-hbWZ_dLUhO_kTlsSIDPKmPM1ak9XI/edit?usp=sharing'
           source_label = 'Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30'
 
           if '.source-strip' not in source:
