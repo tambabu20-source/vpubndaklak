@@ -368,8 +368,24 @@
     const tagColor = value => value === 'Rất gấp' ? 'red' : value === 'Cao' ? 'amber' : value === 'Theo dõi ban hành' ? 'blue' : value === 'Theo kế hoạch' ? 'green' : value === 'Hoàn thành' || value === 'Đã hoàn thành' ? 'green' : value === 'Đã trình/thẩm định' ? 'blue' : value === 'Đang thực hiện' ? 'green' : value === 'Chưa triển khai' ? 'red' : 'gray';
     const unique = (arr) => [...new Set(arr.filter(Boolean))].sort((a,b) => a.localeCompare(b, 'vi'));
     const countBy = (arr, key) => arr.reduce((m, r) => (m[r[key]] = (m[r[key]] || 0) + 1, m), {});
-    const fieldKey = value => String(value || '').trim().toLocaleLowerCase('vi-VN');
+    const fieldKey = value => String(value || '')
+      .replace(/:\s*\d+\s*văn bản.*$/i, '')
+      .trim()
+      .toLocaleLowerCase('vi-VN');
     const fieldMatches = (actual, selected) => !selected || fieldKey(actual) === fieldKey(selected);
+    const fieldLabel = value => {
+      const text = String(value || '').replace(/:\s*\d+\s*văn bản.*$/i, '').trim();
+      const labels = {
+        'tài chính': 'Tài chính',
+        'nông nghiệp và môi trường': 'Nông nghiệp và Môi trường',
+        'giáo dục và đào tạo': 'Giáo dục và Đào tạo',
+        'văn hóa, thể thao và du lịch': 'Văn hóa, Thể thao và Du lịch',
+        'dân tộc và tôn giáo': 'Dân tộc và Tôn giáo',
+        'quân sự - quốc phòng': 'Quân sự - Quốc phòng',
+        'khác': 'Khác'
+      };
+      return labels[fieldKey(text)] || text || 'Chưa xác định';
+    };
     const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const labelMonth = m => m ? `Tháng ${m}/2026` : 'Chưa rõ hạn';
     const parseUpdateDate = value => {
@@ -503,37 +519,37 @@
     }
 
     function renderFieldBars(rows) {
-      const totalScope = 365;
-      const counts = countBy(rows, 'field');
+      const fields = {};
+      rows.forEach(r => {
+        const key = fieldKey(r.field) || 'chua-xac-dinh';
+        if (!fields[key]) fields[key] = {label: fieldLabel(r.field), remaining: 0, completed: 0, updated: 0, completedRecent: 0};
+        fields[key].remaining += 1;
+      });
       const updatedSource = [...rows, ...completedData.filter(r => isRecentCompletion(r))];
-      const updated = updatedSource.reduce((m, r) => {
-        const key = fieldKey(r.field);
-        if (!key) return m;
-        if (isRecentUpdate(r)) m[key] = (m[key] || 0) + 1;
-        else if (isRecentCompletion(r)) m[key] = (m[key] || 0) + 1;
+      updatedSource.forEach(r => {
+        const key = fieldKey(r.field) || 'chua-xac-dinh';
+        if (!fields[key]) fields[key] = {label: fieldLabel(r.field), remaining: 0, completed: 0, updated: 0, completedRecent: 0};
+        if (isRecentUpdate(r) || isRecentCompletion(r)) fields[key].updated += 1;
+      });
+      completedData.forEach(r => {
+        const key = fieldKey(r.field) || 'chua-xac-dinh';
+        if (!fields[key]) fields[key] = {label: fieldLabel(r.field), remaining: 0, completed: 0, updated: 0, completedRecent: 0};
+        fields[key].completed += 1;
+        if (isRecentCompletion(r)) fields[key].completedRecent += 1;
+      });
+      const entries = Object.values(fields).sort((a,b) => b.remaining - a.remaining || b.completed - a.completed || a.label.localeCompare(b.label, 'vi'));
+      const max = Math.max(1, ...entries.map(e => e.remaining));
+      const totals = entries.reduce((m, r) => {
+        m.completed += r.completed;
+        m.remaining += r.remaining;
+        m.updated += r.updated;
+        m.completedRecent += r.completedRecent;
         return m;
-      }, {});
-      const completedRecent = completedData.reduce((m, r) => {
-        const key = fieldKey(r.field);
-        if (key && isRecentCompletion(r)) m[key] = (m[key] || 0) + 1;
-        return m;
-      }, {});
-      const completedAll = completedData.reduce((m, r) => {
-        const key = fieldKey(r.field);
-        if (key) m[key] = (m[key] || 0) + 1;
-        return m;
-      }, {});
-      const entries = Object.entries(counts).sort((a,b) => b[1]-a[1]);
-      const max = Math.max(1, ...entries.map(e => e[1]));
-      const totalRows = rows.length;
-      const totalProcessed = Math.max(0, totalScope - data.length);
-      const totalUpdated = rows.filter(r => isRecentUpdate(r)).length + completedData.filter(r => isRecentCompletion(r)).length;
-      const totalCompletedRecent = completedData.filter(r => isRecentCompletion(r)).length;
-      const targetHtml = entries.map(([name, count], i) => {
-        const key = fieldKey(name);
-        return `<div class="bar-row"><span title="${escapeHtml(name)}">${escapeHtml(name)}</span><div class="track"><div class="fill ${colors[i % colors.length]}" style="width:${Math.max(4, count / max * 100)}%"></div></div><span class="completed-count">${completedAll[key] ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(name)}">${completedAll[key]}</button>` : ''}</span><strong><button class="metric-link" data-filter="field" data-field="${escapeHtml(name)}">${count}</button></strong><span class="updated-count">${updated[key] ? `<button class="metric-link" data-filter="field" data-field="${escapeHtml(name)}">${updated[key]}</button>` : ''}</span><span class="completed-count">${completedRecent[key] ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(name)}">${completedRecent[key]}</button>` : ''}</span></div>`;
+      }, {completed: 0, remaining: 0, updated: 0, completedRecent: 0});
+      const targetHtml = entries.map((row, i) => {
+        return `<div class="bar-row"><span title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</span><div class="track"><div class="fill ${colors[i % colors.length]}" style="width:${Math.max(4, row.remaining / max * 100)}%"></div></div><span class="completed-count">${row.completed ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(row.label)}">${row.completed}</button>` : ''}</span><strong>${row.remaining ? `<button class="metric-link" data-filter="field" data-field="${escapeHtml(row.label)}">${row.remaining}</button>` : ''}</strong><span class="updated-count">${row.updated ? `<button class="metric-link" data-filter="field" data-field="${escapeHtml(row.label)}">${row.updated}</button>` : ''}</span><span class="completed-count">${row.completedRecent ? `<button class="metric-link" data-filter="fieldCompleted" data-field="${escapeHtml(row.label)}">${row.completedRecent}</button>` : ''}</span></div>`;
       }).join('');
-      els.fieldBars.innerHTML = `<div class="bar-row bar-head"><span>Lĩnh vực</span><span></span><span>Đã xử lý hoàn thành</span><span>Tổng VB còn lại</span><span>Cập nhật tuần qua</span><span>Hoàn thành tuần qua</span></div><div class="bar-row bar-total"><span>Tổng cộng</span><span></span><span class="completed-count">${totalProcessed}</span><strong><button class="metric-link" data-filter="all">${totalRows}</button></strong><span class="updated-count">${totalUpdated ? `<button class="metric-link" data-filter="all">${totalUpdated}</button>` : ''}</span><span class="completed-count">${totalCompletedRecent ? `<button class="metric-link" data-filter="completed">${totalCompletedRecent}</button>` : ''}</span></div>${targetHtml}`;
+      els.fieldBars.innerHTML = `<div class="bar-row bar-head"><span>Lĩnh vực</span><span></span><span>Đã xử lý hoàn thành</span><span>Tổng VB còn lại</span><span>Cập nhật tuần qua</span><span>Hoàn thành tuần qua</span></div><div class="bar-row bar-total"><span>Tổng cộng</span><span></span><span class="completed-count">${totals.completed}</span><strong><button class="metric-link" data-filter="all">${totals.remaining}</button></strong><span class="updated-count">${totals.updated ? `<button class="metric-link" data-filter="all">${totals.updated}</button>` : ''}</span><span class="completed-count">${totals.completedRecent ? `<button class="metric-link" data-filter="completed">${totals.completedRecent}</button>` : ''}</span></div>${targetHtml}`;
     }
 
     function renderTimelineBars(rows) {
