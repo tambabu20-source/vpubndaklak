@@ -13,11 +13,11 @@ from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-GOOGLE_DOC_ID = "1lM3yY0Z8IQYFF9IN7YyKvqvb4MvNkSfKCNJPN_H-a6o"
+GOOGLE_DOC_ID = "1_HiwkPbV28TVh-hbWZ_dLUhO_kTlsSIDPKmPM1ak9XI"
 GOOGLE_DOC_EXPORT = f"https://docs.google.com/document/d/{GOOGLE_DOC_ID}/export?format=docx"
 TOTAL = 365
 MIN_SOURCE_ROWS = 150
-FALSE_AUTO_PROGRESS = "Đã xử lý/không còn trong danh mục chưa xử lý của nguồn Google Docs"
+FALSE_AUTO_PROGRESS = "Đã xử lý; không còn trong phụ lục chưa xử lý của nguồn Google Docs chính"
 MANUAL_REVIEW_AS_OF = "19/7/2026"
 MANUAL_REVIEW_UPDATES = {
     "Nghị quyết số 04/2024/NQ-HĐND": {
@@ -269,19 +269,31 @@ def parse_docx_rows(data: bytes) -> dict[str, dict]:
         xml = zf.read("word/document.xml")
     root = ET.fromstring(xml)
     rows: dict[str, dict] = {}
+    current_field = ""
     for table in root.findall(".//w:tbl", ns):
         for row in table.findall("./w:tr", ns):
             cells = [cell_text(cell, ns) for cell in row.findall("./w:tc", ns)]
             cells = [c for c in cells if c]
-            if len(cells) < 4:
+            if len(cells) >= 2 and re.match(r"^[IVXLCDM]+$", cells[0], re.I):
+                current_field = re.sub(r"\s*\(.*$", "", cells[1]).replace("Lĩnh vực", "").strip() or current_field
+                continue
+            if len(cells) < 2:
                 continue
             name_index = next((i for i, text in enumerate(cells) if re.search(r"(Nghị quyết|Quyết định|Chỉ thị).{0,180}(NQ[- ]?HĐND|NQ[- ]?HDND|NQHĐND|QĐ-UBND|CT-UBND)", text, re.I)), -1)
             if name_index < 0:
                 continue
             name = cells[name_index]
+            base_key = norm(name)
+            key = base_key
+            duplicate_index = 2
+            while key in rows:
+                key = f"{base_key} ##{duplicate_index}"
+                duplicate_index += 1
             following = cells[name_index + 1 :]
-            rows[norm(name)] = {
+            rows[key] = {
                 "name": name,
+                "matchKey": base_key,
+                "field": current_field,
                 "action": following[0] if len(following) > 0 else "",
                 "proposedTime": following[1] if len(following) > 1 else "",
                 "deadline": following[2] if len(following) > 2 else "",
@@ -346,7 +358,7 @@ def phase_from(status: str, note: str = "") -> str:
     s = norm(f"{status} {note}")
     if not s or "chưa triển khai" in s or s.startswith("chưa"):
         return "Chưa triển khai"
-    if "đã xử lý" in s or "đã hoàn thành" in s or "được bãi bỏ bởi" in s or "được bãi bỏ tại" in s or "thay thế bằng" in s:
+    if "đã xử lý" in s or "đã hoàn thành xử lý" in s or "được bãi bỏ bởi" in s or "được bãi bỏ tại" in s or "thay thế bằng" in s:
         return "Đã hoàn thành"
     if "trình" in s or "thẩm định" in s or "bctđ" in s or "xin ý kiến thành viên" in s:
         return "Đã trình/thẩm định"
@@ -368,11 +380,21 @@ def priority_from(row: dict) -> str:
     return row.get("priority") or "Theo kế hoạch"
 
 
-def find_source(row: dict, source_rows: dict[str, dict]) -> dict | None:
+def find_source(row: dict, source_rows: dict[str, dict], used_source_keys: set[str] | None = None) -> tuple[str, dict] | None:
+    used_source_keys = used_source_keys or set()
     key = norm(row.get("name", ""))
-    if key in source_rows:
-        return source_rows[key]
-    return next((value for source_key, value in source_rows.items() if key and (key in source_key or source_key in key)), None)
+    if key in source_rows and key not in used_source_keys:
+        return key, source_rows[key]
+    return next(
+        (
+            (source_key, value)
+            for source_key, value in source_rows.items()
+            if source_key not in used_source_keys
+            and key
+            and (value.get("matchKey") == key or key in value.get("matchKey", source_key) or value.get("matchKey", source_key) in key)
+        ),
+        None,
+    )
 
 
 def event_key(event: dict) -> tuple[str, str, str]:
@@ -490,18 +512,60 @@ def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_
     done_names = {norm(row.get("name", "")) for row in done}
     active: list[dict] = []
     unmatched = 0
+    used_source_keys: set[str] = set()
 
     for row in rows:
-        src = find_source(row, source_rows)
-        if not src:
+        found = find_source(row, source_rows, used_source_keys)
+        if not found:
             unmatched += 1
-            active.append(row)
+            old = {k: row.get(k, "") for k in ("status", "phase", "priority")}
+            item = dict(row)
+            item.update({
+                "completed": True,
+                "completedAt": as_of,
+                "updatedAt": as_of,
+                "recentUpdate": True,
+                "phase": "Đã hoàn thành",
+                "priority": "Hoàn thành",
+                "status": FALSE_AUTO_PROGRESS,
+            })
+            item_key = norm(item.get("name", ""))
+            if item_key not in done_names:
+                done.append(item)
+                done_names.add(item_key)
+            event = {
+                "stt": row.get("stt", ""),
+                "name": row.get("name", ""),
+                "field": row.get("field", ""),
+                "agency": row.get("agency", ""),
+                "updatedAt": as_of,
+                "oldPhase": old.get("phase", ""),
+                "newPhase": "Đã hoàn thành",
+                "oldPriority": old.get("priority", ""),
+                "newPriority": "Hoàn thành",
+                "progress": FALSE_AUTO_PROGRESS,
+                "highlight": True,
+                "changes": [
+                    {
+                        "label": "Tình trạng",
+                        "old": old.get("status", ""),
+                        "new": FALSE_AUTO_PROGRESS,
+                    }
+                ],
+            }
+            if event_key(event) not in existing_events:
+                updates.append(event)
+                existing_events.add(event_key(event))
             continue
+        source_key, src = found
+        used_source_keys.add(source_key)
 
         old = {k: row.get(k, "") for k in ("action", "proposedTime", "deadline", "status", "note", "phase", "priority")}
         for key in ("action", "proposedTime", "deadline", "status", "note"):
             if src.get(key):
                 row[key] = src[key]
+        if src.get("field"):
+            row["field"] = src["field"]
         row["deadlineMonth"] = month_from(row.get("deadline", "")) or row.get("deadlineMonth")
         row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
         row["priority"] = priority_from(row)
@@ -549,6 +613,54 @@ def update_rows(rows: list[dict], done: list[dict], updates: list[dict], source_
                 existing_events.add(event_key(event))
         active.append(row)
 
+    template_by_field = {}
+    for row in rows + done:
+        if row.get("field") and row.get("agency"):
+            template_by_field.setdefault(row["field"], row)
+
+    for source_key, src in source_rows.items():
+        if source_key in used_source_keys:
+            continue
+        field = src.get("field") or "Khác"
+        template = template_by_field.get(field, {})
+        row = {
+            "stt": len(active) + 1,
+            "name": src.get("name", ""),
+            "type": "Nghị quyết" if re.search(r"Nghị quyết", src.get("name", ""), re.I) else ("Chỉ thị" if re.search(r"Chỉ thị", src.get("name", ""), re.I) else "Quyết định"),
+            "province": "Phú Yên" if "Phú Yên" in src.get("name", "") else "Đắk Lắk",
+            "agency": template.get("agency") or ("Các ban của HĐND tỉnh" if "HĐND" in src.get("name", "") else "UBND tỉnh"),
+            "agencies": template.get("agencies") or ([template.get("agency")] if template.get("agency") else ["Các ban của HĐND tỉnh" if "HĐND" in src.get("name", "") else "UBND tỉnh"]),
+            "field": field,
+            "action": src.get("action", ""),
+            "proposedTime": src.get("proposedTime", ""),
+            "deadline": src.get("deadline", ""),
+            "deadlineMonth": month_from(src.get("deadline", "")),
+            "status": src.get("status", ""),
+            "note": src.get("note", ""),
+            "completed": False,
+            "recentUpdate": True,
+            "updatedAt": as_of,
+        }
+        row["phase"] = phase_from(row.get("status", ""), row.get("note", ""))
+        row["priority"] = priority_from(row)
+        active.append(row)
+        event = {
+            "stt": row.get("stt", ""),
+            "name": row.get("name", ""),
+            "field": row.get("field", ""),
+            "agency": row.get("agency", ""),
+            "updatedAt": as_of,
+            "oldPhase": "",
+            "newPhase": row.get("phase", ""),
+            "oldPriority": "",
+            "newPriority": row.get("priority", ""),
+            "progress": row.get("status", "") or "Được bổ sung từ nguồn Google Docs chính",
+            "changes": [{"label": "Bổ sung từ nguồn chính", "old": "", "new": "Có trong Google Docs nguồn chính"}],
+        }
+        if event_key(event) not in existing_events:
+            updates.append(event)
+            existing_events.add(event_key(event))
+
     for index, row in enumerate(active, start=1):
         row["stt"] = index
     return active, done, updates, unmatched
@@ -593,7 +705,9 @@ def run(index_path: Path) -> None:
     done = load_json(source, "completedDataset")
     updates = load_json(source, "updatesDataset")
     source_rows = parse_docx_rows(download_docx())
-    manual_applied = apply_manual_review_updates(source_rows)
+    # Google Docs is the current authoritative source. Keep legacy manual review
+    # overrides disabled so scheduled updates do not overwrite newer progress.
+    manual_applied = 0
     if len(source_rows) < MIN_SOURCE_ROWS:
         raise RuntimeError(f"Nguồn Google Docs chỉ đọc được {len(source_rows)} dòng, thấp hơn ngưỡng an toàn {MIN_SOURCE_ROWS}; giữ nguyên dashboard cũ.")
     rows, done, updates, restored = restore_false_auto_completions(rows, done, updates)
