@@ -588,16 +588,19 @@
       return order[group] ?? 9;
     }
 
-    function renderLatestUpdateSummary(updates) {
-      const labels = ['Đã hoàn thành xử lý', 'Trình UBND tỉnh', 'Đã thẩm định', 'Đang tiếp tục triển khai'];
-      const counts = Object.fromEntries(labels.map(label => [label, 0]));
-      updates.forEach(u => {
-        const statusChange = u.changes.find(c => c.label === 'Tình trạng');
-        const text = u.progress || statusChange?.new || '';
-        counts[updateProgressGroup(text)] += 1;
-      });
-      const stats = [['Tổng VB cập nhật', updates.length, 'all'], ...labels.map(label => [label, counts[label], label])];
-      els.latestUpdateSummary.innerHTML = stats.map(([label, value, filter], index) => `<div class="update-stat ${index === 0 ? 'total' : ''}"><button class="metric-link" data-update-filter="${escapeHtml(filter)}">${value}</button><span>${escapeHtml(label)}</span></div>`).join('');
+    function isCompletedProgressUpdate(update) {
+      const statusChange = update.changes.find(c => c.label === 'Tình trạng');
+      const text = String(update.progress || statusChange?.new || '').toLowerCase();
+      return update.newPhase === 'Đã hoàn thành'
+        || update.newPriority === 'Hoàn thành'
+        || /đã xử lý|không còn trong phụ lục|không còn trong danh mục|đã được bãi bỏ|được bãi bỏ bởi|thay thế bằng/.test(text);
+    }
+
+    function renderLatestUpdateSummary(updates, latestLabel) {
+      els.latestUpdateSummary.innerHTML = `
+        <div class="update-stat total"><button class="metric-link" data-update-filter="all">${updates.length}</button><span>VB hoàn thành 7 ngày gần nhất</span></div>
+        <div class="update-stat"><b>${escapeHtml(latestLabel || '')}</b><span>Mốc cập nhật gần nhất</span></div>
+      `;
     }
 
     function renderLatestUpdates() {
@@ -606,23 +609,18 @@
         .filter(u => u.dateObj);
       const recentUpdates = recentWindowEnd === null ? [] : datedUpdates
         .filter(u => u.dateObj.getTime() <= recentWindowEnd.getTime() && recentWindowEnd.getTime() - u.dateObj.getTime() <= recentWindowMs)
-        .sort((a,b) => latestUpdateRank(a) - latestUpdateRank(b) || b.dateObj.getTime() - a.dateObj.getTime() || b.stt - a.stt);
+        .filter(isCompletedProgressUpdate)
+        .sort((a,b) => b.dateObj.getTime() - a.dateObj.getTime() || b.stt - a.stt);
       const latestLabel = '16/8/2026';
-      els.latestUpdatesTitle.innerHTML = `Cập nhật tiến độ mới nhất <span class="muted">(7 ngày gần nhất${latestLabel ? `, đến ${escapeHtml(latestLabel)}` : ''})</span>`;
-      renderLatestUpdateSummary(recentUpdates);
-      const visibleUpdates = latestUpdateFilter === 'all' ? recentUpdates : recentUpdates.filter(u => {
-        const statusChange = u.changes.find(c => c.label === 'Tình trạng');
-        const text = u.progress || statusChange?.new || '';
-        return updateProgressGroup(text) === latestUpdateFilter;
-      });
+      els.latestUpdatesTitle.innerHTML = `Văn bản hoàn thành trong 7 ngày gần nhất <span class="muted">${latestLabel ? `(đến ${escapeHtml(latestLabel)})` : ''}</span>`;
+      renderLatestUpdateSummary(recentUpdates, latestLabel);
+      const visibleUpdates = recentUpdates;
       els.latestUpdates.innerHTML = visibleUpdates.length ? visibleUpdates.map(u => {
         const statusChange = u.changes.find(c => c.label === 'Tình trạng');
-        const progressText = u.progress || (statusChange ? statusChange.new : (u.changes[0]?.new || 'Đã ghi nhận cập nhật tiến độ.'));
-        const group = updateProgressGroup(progressText);
-        const displayGroup = group === 'Đã hoàn thành xử lý' ? 'Đã xử lý' : group;
+        const progressText = u.progress || (statusChange ? statusChange.new : (u.changes[0]?.new || 'Đã hoàn thành xử lý.'));
         const displayProgressText = progressText.replace(/^\s*Đã ban hành/i, 'Đã xử lý');
-        return `<div class="mini ${u.highlight ? 'highlight' : ''}"><strong>${u.stt}. ${escapeHtml(u.name)}</strong><div class="meta-line"><span class="tag ${group === 'Đã hoàn thành xử lý' ? 'green' : 'blue'}">${escapeHtml(displayGroup)}</span><span class="tag gray">Cập nhật ngày ${escapeHtml(u.updatedAt)}</span><span class="tag violet">${escapeHtml(u.field)}</span></div><div class="progress-detail"><b>Tiến độ xử lý:</b><br>${escapeHtml(displayProgressText)}</div></div>`;
-      }).join('') : '<div class="mini"><strong>Chưa có cập nhật phù hợp</strong><span>Không có văn bản thuộc nhóm đang chọn trong 7 ngày gần nhất.</span></div>';
+        return `<div class="mini ${u.highlight ? 'highlight' : ''}"><strong>${u.stt}. ${escapeHtml(u.name)}</strong><div class="meta-line"><span class="tag green">Đã xử lý</span><span class="tag gray">Cập nhật ngày ${escapeHtml(u.updatedAt)}</span><span class="tag violet">${escapeHtml(u.field)}</span></div><div class="progress-detail"><b>Tiến độ xử lý:</b><br>${escapeHtml(displayProgressText)}</div></div>`;
+      }).join('') : '<div class="mini"><strong>Chưa có văn bản hoàn thành xử lý</strong><span>Không có văn bản hoàn thành trong 7 ngày gần nhất.</span></div>';
     }
 
     function renderTable(rows) {
