@@ -16,7 +16,7 @@ from xml.etree import ElementTree as ET
 GOOGLE_DOC_ID = "1_HiwkPbV28TVh-hbWZ_dLUhO_kTlsSIDPKmPM1ak9XI"
 GOOGLE_DOC_EXPORT = f"https://docs.google.com/document/d/{GOOGLE_DOC_ID}/export?format=docx"
 TOTAL = 365
-MIN_SOURCE_ROWS = 150
+MIN_SOURCE_ROWS = 120
 FALSE_AUTO_PROGRESS = "Đã xử lý; không còn trong phụ lục chưa xử lý của nguồn Google Docs chính"
 MANUAL_REVIEW_AS_OF = "19/7/2026"
 MANUAL_REVIEW_UPDATES = {
@@ -226,6 +226,18 @@ def clean(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").replace("\xa0", " ")).strip()
 
 
+def document_id(value: str) -> str:
+    text = norm(value).replace("–", "-").replace("—", "-")
+    match = re.search(
+        r"(nghị quyết|quyết định|chỉ thị)\s*(?:số\s*)?"
+        r"(\d+/\d{4}/(?:nq-?hđnd|nqhđnd|qđ-?ubnd|qđubnd|ct-?ubnd))",
+        text,
+    )
+    if not match:
+        return ""
+    return f"{match.group(1)} {match.group(2).replace('-', '')}"
+
+
 def load_json(source: str, script_id: str) -> list[dict]:
     match = re.search(rf'<script id="{re.escape(script_id)}" type="application/json">(.*?)</script>', source, re.S)
     if not match:
@@ -385,6 +397,19 @@ def find_source(row: dict, source_rows: dict[str, dict], used_source_keys: set[s
     key = norm(row.get("name", ""))
     if key in source_rows and key not in used_source_keys:
         return key, source_rows[key]
+    row_document_id = document_id(row.get("name", ""))
+    if row_document_id:
+        identifier_match = next(
+            (
+                (source_key, value)
+                for source_key, value in source_rows.items()
+                if source_key not in used_source_keys
+                and document_id(value.get("name", "")) == row_document_id
+            ),
+            None,
+        )
+        if identifier_match:
+            return identifier_match
     return next(
         (
             (source_key, value)
@@ -680,20 +705,30 @@ def refresh_text(source: str, rows: list[dict], done: list[dict], as_of: str) ->
     phases = Counter(row.get("phase", "") for row in rows)
     not_started = phases.get("Chưa triển khai", 0)
     deployed = remaining - not_started
-    source = re.sub(r"Nguồn: .*?</span>", "Nguồn: Google Docs nguồn chính; cập nhật tự động hằng ngày lúc 16h30</span>", source, count=1)
+    summary = (
+        f"Đến ngày <strong>{as_of}</strong>, tỉnh còn <strong>{remaining} văn bản</strong> "
+        "quy phạm pháp luật chịu tác động của việc sắp xếp tổ chức bộ máy và thực hiện mô hình "
+        f"chính quyền địa phương 02 cấp chưa hoàn thành xử lý, gồm <strong>{counts.get('Nghị quyết', 0)} nghị quyết</strong> "
+        f"và <strong>{counts.get('Quyết định', 0)} quyết định</strong>. Tính chung trên tổng số "
+        f"<strong>{TOTAL} văn bản</strong> cần xử lý, đã xử lý <strong>{processed} văn bản</strong>, "
+        f"đạt khoảng <strong>{processed_pct:.1f}%</strong>; còn lại <strong>{remaining_pct:.1f}%</strong>. "
+        f"Theo Google Docs nguồn chính, <strong>{deployed} văn bản</strong> đã được triển khai/cập nhật tiến độ "
+        f"và <strong>{not_started} văn bản</strong> chưa triển khai xử lý."
+    )
+    summary_grid = (
+        '<div class="summary-grid">'
+        f'<div class="summary-stat"><b>{processed_pct:.1f}%</b><span>Đã xử lý {processed}/{TOTAL} văn bản</span></div>'
+        f'<div class="summary-stat"><b>{remaining_pct:.1f}%</b><span>Còn {remaining} văn bản chưa hoàn thành</span></div>'
+        f'<div class="summary-stat"><b>{deployed}</b><span>Văn bản đã triển khai/cập nhật tiến độ</span></div>'
+        f'<div class="summary-stat"><b>{not_started}</b><span>Văn bản chưa triển khai xử lý</span></div>'
+        '</div>'
+    )
     source = re.sub(r"Đang theo dõi: \d+ văn bản", f"Đang theo dõi: {remaining} văn bản", source)
-    source = re.sub(r"Hoàn thành xử lý: \d+ văn bản", f"Hoàn thành xử lý: {len(done)} văn bản", source)
+    source = re.sub(r"Hoàn thành xử lý: \d+ văn bản", f"Hoàn thành xử lý: {processed} văn bản", source)
     source = re.sub(r"\d+ nghị quyết · \d+ quyết định", f"{counts.get('Nghị quyết', 0)} nghị quyết · {counts.get('Quyết định', 0)} quyết định", source, count=1)
     source = re.sub(r"Tóm tắt tiến độ xử lý đến ngày [^<]+", f"Tóm tắt tiến độ xử lý đến ngày {as_of}", source)
-    source = re.sub(r"Đến ngày <strong>[^<]+</strong>", f"Đến ngày <strong>{as_of}</strong>", source)
-    source = re.sub(r"tỉnh còn <strong>\d+ văn bản</strong>", f"tỉnh còn <strong>{remaining} văn bản</strong>", source)
-    source = re.sub(r"đã xử lý <strong>\d+ văn bản</strong>", f"đã xử lý <strong>{processed} văn bản</strong>", source)
-    source = re.sub(r"đạt khoảng <strong>[^<]+</strong>; còn lại <strong>[^<]+</strong>", f"đạt khoảng <strong>{processed_pct:.1f}%</strong>; còn lại <strong>{remaining_pct:.1f}%</strong>", source)
-    source = re.sub(r"Dashboard đang ghi nhận <strong>\d+ văn bản</strong> đã có triển khai/cập nhật tiến độ và <strong>\d+ văn bản</strong> chưa triển khai xử lý", f"Dashboard đang ghi nhận <strong>{deployed} văn bản</strong> đã có triển khai/cập nhật tiến độ và <strong>{not_started} văn bản</strong> chưa triển khai xử lý", source)
-    source = re.sub(r"<div class=\"summary-stat\"><b>[^<]+</b><span>Đã xử lý \d+/365 văn bản</span></div>", f"<div class=\"summary-stat\"><b>{processed_pct:.1f}%</b><span>Đã xử lý {processed}/{TOTAL} văn bản</span></div>", source)
-    source = re.sub(r"<div class=\"summary-stat\"><b>[^<]+</b><span>Còn \d+ văn bản chưa hoàn thành</span></div>", f"<div class=\"summary-stat\"><b>{remaining_pct:.1f}%</b><span>Còn {remaining} văn bản chưa hoàn thành</span></div>", source)
-    source = re.sub(r"<div class=\"summary-stat\"><b>\d+</b><span>Văn bản đã triển khai xử lý</span></div>", f"<div class=\"summary-stat\"><b>{deployed}</b><span>Văn bản đã triển khai xử lý</span></div>", source)
-    source = re.sub(r"<div class=\"summary-stat\"><b>\d+</b><span>Văn bản chưa triển khai xử lý</span></div>", f"<div class=\"summary-stat\"><b>{not_started}</b><span>Văn bản chưa triển khai xử lý</span></div>", source)
+    source = re.sub(r'(<section class="summary-panel">\s*<h2>.*?</h2>\s*)<p>.*?</p>', rf'\1<p>{summary}</p>', source, count=1, flags=re.S)
+    source = re.sub(r'<div class="summary-grid">.*?</div>\s*</section>', f'{summary_grid}\n    </section>', source, count=1, flags=re.S)
     source = re.sub(r"const recentWindowEnd = parseUpdateDate\('[^']+'\);", f"const recentWindowEnd = parseUpdateDate('{as_of}');", source)
     source = re.sub(r"const latestLabel = '[^']+';", f"const latestLabel = '{as_of}';", source)
     return source
